@@ -22,7 +22,8 @@ function save_vars_to_csv(vars, geo, condition)
             T         = comp_data.T,
             P         = comp_data.P,
             # x（蒸気クオリティ）を持たない部位は NaN（欠損値）で埋める
-            x         = haskey(comp_data, :x) ? comp_data.x : fill(NaN, N_nodes)
+            x         = haskey(comp_data, :x) ? comp_data.x : fill(NaN, N_nodes),
+            α         = comp_data.α
         )
         
         # メインの DataFrame に縦結合
@@ -56,7 +57,7 @@ function save_residual_to_csv(f, condition)
     CSV.write(filename, combined_df)
 end
 
-function save_Q_T_to_csv(Q_ev, Q_gr, Q_leak, T_ev, T_ec, T_cc)
+function save_Q_T_m_to_csv(Q_ev, Q_gr, Q_leak, T_ev, T_ec, T_cc, m)
     res_Q_T_dir = "./res/Q_Ts/"
     if !ispath(res_Q_T_dir)
         mkpath(res_Q_T_dir)
@@ -66,7 +67,8 @@ function save_Q_T_to_csv(Q_ev, Q_gr, Q_leak, T_ev, T_ec, T_cc)
                             Q_leak = Q_leak,
                             T_ev = T_ev,
                             T_ec = T_ec,
-                            T_cc = T_cc
+                            T_cc = T_cc,
+                            m    = m
                         )
     filename = res_Q_T_dir * "Q_Ts.csv"
     CSV.write(filename, combined_df)

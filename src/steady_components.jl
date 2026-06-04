@@ -96,6 +96,7 @@ function calc_cond!(vars, m, geo, T_cond, FLUID)
             vars.cond.P[i] = vars.cond.P[i-1] - ΔP_2p(i-1) * dl
             vars.cond.T[i] = calc_Tsat(vars.cond.P[i], FLUID)
             vars.cond.mass[i] = ρ_2p(i) * v_cond
+            vars.cond.α[i] = calc_void_rate(vars.cond.T[i], vars.cond.x[i], FLUID)
             if vars.cond.x[i] < 0.0 # 直前の計算結果から二相流の出口を検知
                 tp_flag = :l # 液相開始
                 # println("liquid starts!")
@@ -227,7 +228,7 @@ function calc_residual!(f_res, u, vars, geo, condition, Q_nom)
 
     # save_vars_to_csv(vars, geo) # 外部で保存できる
     save_residual_to_csv(f_res_t, condition)
-    save_Q_T_to_csv(Q_ev, Q_gr, Q_leak, T_ev, T_ec, T_cc)
+    save_Q_T_m_to_csv(Q_ev, Q_gr, Q_leak, T_ev, T_ec, T_cc, m)
     
     f_res[1] = f_res_t[1] / Q_nom
     f_res[2] = f_res_t[2] / Q_nom
@@ -254,6 +255,9 @@ function estimate_cc_void_ratio!(α, vars, geo, condition, mass_charged=0.03)
     T_cc = only(load_T_cc_only())
     println("α=$(α)")
     vars.cc.x[geo.cc.N] = calc_vapor_quality(T_cc, α, condition.fluid)
+    vars.cc.α[geo.cc.N] = α
+    vars.cc.T[geo.cc.N] = T_cc
+    vars.cc.P[geo.cc.N] = calc_Psat(T_cc, condition.fluid)
     return geo.cc.A_cross * geo.cc.L - mass_cc / calc_ρ_2p(T_cc, α, condition.fluid)
 end
 
