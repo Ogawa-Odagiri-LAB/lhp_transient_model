@@ -178,6 +178,42 @@ function calc_k_2p(T, α, FLUID)
     return α_p * PropsSI("L", "T", T, "Q", 1, FLUID) + (1 - α_p) * PropsSI("L", "T", T, "Q", 0, FLUID)
 end
 
+function calc_e_1p(T, P, FLUID)
+    Psat = calc_Psat(T, FLUID)
+    if abs(P - Psat) / P < 1e-5
+        if P < Psat
+            return PropsSI("U", "T", T, "Q", 1.0, FLUID)
+        else
+            return PropsSI("U", "T", T, "Q", 0.0, FLUID)
+        end
+    else
+        return PropsSI("U", "T", T, "P", P, FLUID)
+    end
+end
+
+function calc_e_2p(T, α, FLUID)
+    α_p = void_correction(α)
+    return α_p * PropsSI("U", "T", T, "Q", 1, FLUID) + (1 - α_p) * PropsSI("U", "T", T, "Q", 0, FLUID)
+end
+
+function calc_h_1p(T, P, FLUID)
+    Psat = calc_Psat(T, FLUID)
+    if abs(P - Psat) / P < 1e-5
+        if P < Psat
+            return PropsSI("H", "T", T, "Q", 1.0, FLUID)
+        else
+            return PropsSI("H", "T", T, "Q", 0.0, FLUID)
+        end
+    else
+        return PropsSI("H", "T", T, "P", P, FLUID)
+    end
+end
+
+function calc_h_2p(T, α, FLUID)
+    α_p = void_correction(α)
+    return α_p * PropsSI("H", "T", T, "Q", 1, FLUID) + (1 - α_p) * PropsSI("H", "T", T, "Q", 0, FLUID)
+end
+
 function calc_dT_dP_sat(T, FLUID) # クラジウス・クラペイロンの式から計算
     h_g = PropsSI("H", "T", T, "Q", 1, FLUID)
     h_f = PropsSI("H", "T", T, "Q", 0, FLUID)
@@ -189,7 +225,7 @@ end
 
 # println("dTdP=$(calc_dT_dP_sat(283.0))")
 function calc_k_eff(T, FLUID)
-    Φ = 0.25 # 空隙率
+    Φ = 0.56 # 空隙率
     k_s = k_sus304(T)
     k_l = PropsSI("L", "T", T, "Q", 0.0, FLUID)
     β = (1 + k_l / k_s) / (1 - k_l / k_s)
@@ -382,4 +418,12 @@ function load_T_cc_only()
     T_cc_data = file.T_cc
     
     return T_cc_data
+end
+
+# 過渡解析中のウィック回りの計算で用いる
+function calc_wick_energy(T, V, FLUID)
+    Φ = 0.56
+    E_wick = V * (1 - Φ) * ρ_sus304(T) * c_sus304(T) * T
+    E_liquid = V * Φ * calc_ρ_2p(T, 0.0, FLUID) * calc_e_2p(T, 0.0, FLUID)
+    return E_wick + E_liquid
 end
