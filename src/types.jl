@@ -6,10 +6,15 @@
 end
 
 @with_kw struct LHPTransientCondition
+    Q_apply::Float64
+    dt::Float64 # [s]
+    t_init::Float64
+    t_end::Float64
+
     fluid::String = "propylene"
     h_ev::Float64 = 8000.0       # [W/m2 K]
     T_cond::Float64 = 15.0 + 273.15 # [K]
-    Q_apply_init::Float64 = 40.0       # [W]
+    Q_apply_init::Float64 = 50.0       # [W]
 end
 
 @with_kw struct opt_u
@@ -25,7 +30,8 @@ end
 
 # ウィック
 @with_kw struct WickGeometry
-    N::Int = 7
+    N::Int = 1
+
     n_grv::Int = 12
     L::Float64 = 0.035
 
@@ -68,6 +74,8 @@ end
     D_i::Float64
     D_o::Float64
     A_cross::Float64 = (π / 4) * D_i^2
+    S_inner::Float64 = π * D_i * dl
+    V::Float64 = A_cross * L
 end
 
 # 凝縮器
@@ -78,6 +86,8 @@ end
     D_i::Float64
     D_o::Float64
     A_cross::Float64 = (π / 4) * D_i^2
+    S_inner::Float64 = π * D_i * dl
+    V::Float64 = A_cross * L
 end
 
 @with_kw struct CCGeometry
@@ -87,6 +97,8 @@ end
     D_i::Float64
     D_o::Float64
     A_cross::Float64 = (π / 4) * D_i^2
+    S_inner::Float64 = π * D_i * dl
+    V::Float64 = A_cross * L
 end
 
 @with_kw struct LHPGeometry

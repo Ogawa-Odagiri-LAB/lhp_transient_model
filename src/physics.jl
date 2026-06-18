@@ -72,35 +72,25 @@ function ρ_sus304(T)
 end
 
 # 流体
+# ==========================================
+# 3. ユーザー指定の関数群（完全互換）
+# ==========================================
+
 function calc_Psat(T, FLUID)
-    return PropsSI("P", "T", T, "Q", 1.0, FLUID)
+    return PROPYLENE_DATA[].Psat_T(T)
 end
 
 function calc_Tsat(P, FLUID)
-    return PropsSI("T", "P", P, "Q", 1.0, FLUID)
+    return PROPYLENE_DATA[].Tsat_P(P)
 end
 
 function calc_latent_heat(T, FLUID)
-    return PropsSI("H", "T", T, "Q", 1, FLUID) - PropsSI("H", "T", T, "Q", 0, FLUID)
+    return PROPYLENE_DATA[].latent_heat_T(T)
 end
 
-function calc_ρ_1p(T, P, FLUID)
-    Psat = calc_Psat(T, FLUID)
-    if abs(P - Psat) / P < 1e-5
-        if P < Psat
-            return PropsSI("D", "T", T, "Q", 1.0, FLUID)
-        else
-            return PropsSI("D", "T", T, "Q", 0.0, FLUID)
-        end
-    else
-        return PropsSI("D", "T", T, "P", P, FLUID)
-    end
-end
-
-
-function void_correction(α) # 仕様上，αが負や1より大きな値をとる場合がある．
+function void_correction(α)
     if α <= 0.0
-        return 0.0 + 1e-8 # 0.0や1.0にすると，計算が破綻する
+        return 0.0 + 1e-8
     elseif α >= 1.0
         return 1.0 - 1e-8
     else
@@ -108,7 +98,7 @@ function void_correction(α) # 仕様上，αが負や1より大きな値をと�
     end
 end
 
-function vapor_quality_correction(x) # 仕様上，xが負や1より大きな値をとる場合がある．
+function vapor_quality_correction(x)
     if x <= 0.0
         return 0.0 + 1e-8
     elseif x >= 1.0
@@ -118,121 +108,128 @@ function vapor_quality_correction(x) # 仕様上，xが負や1より大きな値
     end
 end
 
+function calc_ρ_1p(T, P, FLUID)
+    Psat = calc_Psat(T, FLUID)
+    if abs(P - Psat) / P < 1e-5
+        if P < Psat
+            return PROPYLENE_DATA[].D_sat_g_T(T)
+        else
+            return PROPYLENE_DATA[].D_sat_f_T(T)
+        end
+    else
+        return PROPYLENE_DATA[].D_1p_TP(T, P)
+    end
+end
+
 function calc_ρ_2p(T, α, FLUID)
     α_p = void_correction(α)
-    return α_p * PropsSI("D", "T", T, "Q", 1, FLUID) + (1 - α_p) * PropsSI("D", "T", T, "Q", 0, FLUID)
+    return α_p * PROPYLENE_DATA[].D_sat_g_T(T) + (1 - α_p) * PROPYLENE_DATA[].D_sat_f_T(T)
 end 
 
 function calc_cp_1p(T, P, FLUID)
     Psat = calc_Psat(T, FLUID)
     if abs(P - Psat) / P < 1e-5
         if P < Psat
-            return PropsSI("C", "T", T, "Q", 1.0, FLUID)
+            return PROPYLENE_DATA[].C_sat_g_T(T)
         else
-            return PropsSI("C", "T", T, "Q", 0.0, FLUID)
+            return PROPYLENE_DATA[].C_sat_f_T(T)
         end
     else
-        return PropsSI("C", "T", T, "P", P, FLUID)
+        return PROPYLENE_DATA[].C_1p_TP(T, P)
     end
 end
 
 function calc_cp_2p(T, α, FLUID)
     α_p = void_correction(α)
     x = calc_vapor_quality(T, α_p, FLUID)
-    return x * PropsSI("C", "T", T, "Q", 1, FLUID) + (1 - x) * PropsSI("C", "T", T, "Q", 0, FLUID)
+    return x * PROPYLENE_DATA[].C_sat_g_T(T) + (1 - x) * PROPYLENE_DATA[].C_sat_f_T(T)
 end 
 
 function calc_μ_1p(T, P, FLUID)
     Psat = calc_Psat(T, FLUID)
     if abs(P - Psat) / P < 1e-5
         if P < Psat
-            return PropsSI("V", "T", T, "Q", 1.0, FLUID)
+            return PROPYLENE_DATA[].V_sat_g_T(T)
         else
-            return PropsSI("V", "T", T, "Q", 0.0, FLUID)
+            return PROPYLENE_DATA[].V_sat_f_T(T)
         end
     else
-        return PropsSI("V", "T", T, "P", P, FLUID)
+        return PROPYLENE_DATA[].V_1p_TP(T, P)
     end
 end
 
 function calc_μ_2p(T, α, FLUID)
     α_p = void_correction(α)
-    return α_p * PropsSI("V", "T", T, "Q", 1, FLUID) + (1 - α_p) * PropsSI("V", "T", T, "Q", 0.0, FLUID)
+    return α_p * PROPYLENE_DATA[].V_sat_g_T(T) + (1 - α_p) * PROPYLENE_DATA[].V_sat_f_T(T)
 end
 
 function calc_k_1p(T, P, FLUID)
     Psat = calc_Psat(T, FLUID)
     if abs(P - Psat) / P < 1e-5
         if P < Psat
-            return PropsSI("L", "T", T, "Q", 1.0, FLUID)
+            return PROPYLENE_DATA[].L_sat_g_T(T)
         else
-            return PropsSI("L", "T", T, "Q", 0.0, FLUID)
+            return PROPYLENE_DATA[].L_sat_f_T(T)
         end
     else
-        return PropsSI("L", "T", T, "P", P, FLUID)
+        return PROPYLENE_DATA[].L_1p_TP(T, P)
     end
 end
 
 function calc_k_2p(T, α, FLUID)
     α_p = void_correction(α)
-    return α_p * PropsSI("L", "T", T, "Q", 1, FLUID) + (1 - α_p) * PropsSI("L", "T", T, "Q", 0, FLUID)
+    return α_p * PROPYLENE_DATA[].L_sat_g_T(T) + (1 - α_p) * PROPYLENE_DATA[].L_sat_f_T(T)
 end
 
 function calc_e_1p(T, P, FLUID)
     Psat = calc_Psat(T, FLUID)
     if abs(P - Psat) / P < 1e-5
         if P < Psat
-            return PropsSI("U", "T", T, "Q", 1.0, FLUID)
+            return PROPYLENE_DATA[].U_sat_g_T(T)
         else
-            return PropsSI("U", "T", T, "Q", 0.0, FLUID)
+            return PROPYLENE_DATA[].U_sat_f_T(T)
         end
     else
-        return PropsSI("U", "T", T, "P", P, FLUID)
+        return PROPYLENE_DATA[].U_1p_TP(T, P)
     end
 end
 
 function calc_e_2p(T, α, FLUID)
     α_p = void_correction(α)
-    return α_p * PropsSI("U", "T", T, "Q", 1, FLUID) + (1 - α_p) * PropsSI("U", "T", T, "Q", 0, FLUID)
+    return α_p * PROPYLENE_DATA[].U_sat_g_T(T) + (1 - α_p) * PROPYLENE_DATA[].U_sat_f_T(T)
 end
 
 function calc_h_1p(T, P, FLUID)
     Psat = calc_Psat(T, FLUID)
     if abs(P - Psat) / P < 1e-5
         if P < Psat
-            return PropsSI("H", "T", T, "Q", 1.0, FLUID)
+            return PROPYLENE_DATA[].H_sat_g_T(T)
         else
-            return PropsSI("H", "T", T, "Q", 0.0, FLUID)
+            return PROPYLENE_DATA[].H_sat_f_T(T)
         end
     else
-        return PropsSI("H", "T", T, "P", P, FLUID)
+        return PROPYLENE_DATA[].H_1p_TP(T, P)
     end
 end
 
 function calc_h_2p(T, α, FLUID)
     α_p = void_correction(α)
-    return α_p * PropsSI("H", "T", T, "Q", 1, FLUID) + (1 - α_p) * PropsSI("H", "T", T, "Q", 0, FLUID)
+    return α_p * PROPYLENE_DATA[].H_sat_g_T(T) + (1 - α_p) * PROPYLENE_DATA[].H_sat_f_T(T)
 end
 
-function calc_dT_dP_sat(T, FLUID) # クラジウス・クラペイロンの式から計算
-    h_g = PropsSI("H", "T", T, "Q", 1, FLUID)
-    h_f = PropsSI("H", "T", T, "Q", 0, FLUID)
-    ρ_g = PropsSI("D", "T", T, "Q", 1, FLUID)
-    ρ_f = PropsSI("D", "T", T, "Q", 0, FLUID)
-    
-    return T * (1 / ρ_g - 1 / ρ_f) / (h_g - h_f)
+function calc_dT_dP_sat(T, FLUID)
+    return PROPYLENE_DATA[].dTdP_sat_T(T)
 end
 
-# println("dTdP=$(calc_dT_dP_sat(283.0))")
 function calc_k_eff(T, FLUID)
-    Φ = 0.56 # 空隙率
+    Φ = 0.56
     k_s = k_sus304(T)
-    k_l = PropsSI("L", "T", T, "Q", 0.0, FLUID)
+    k_l = PROPYLENE_DATA[].L_sat_f_T(T)
     β = (1 + k_l / k_s) / (1 - k_l / k_s)
     return k_s * (β - Φ) / (β + Φ)
 end
 
-# 無次元数計算
+# --- 無次元数計算 ---
 function calc_Re_1p(T, P, m, D_i, A_cross, FLUID)
     μ = calc_μ_1p(T, P, FLUID)
     return (m * D_i) / (μ * A_cross)
@@ -257,20 +254,19 @@ function calc_Pr_2p(T, α, FLUID)
     return μ * cp / k
 end
 
-function calc_Re_sat(T, m_p, D_i, A_cross, phase::Symbol, FLUID) # 飽和気体もしくは液体のどちらかを指定してレイノルズ数を計算する関数
+function calc_Re_sat(T, m_p, D_i, A_cross, phase::Symbol, FLUID)
     if phase == :liquid
-        μ_p = PropsSI("V", "T", T, "Q", 0.0, FLUID)
+        μ_p = PROPYLENE_DATA[].V_sat_f_T(T)
     elseif phase == :vapor
-        μ_p = PropsSI("V", "T", T, "Q", 1.0, FLUID)
+        μ_p = PROPYLENE_DATA[].V_sat_g_T(T)
     else
         error("invalid phase")
     end
-
     return (m_p * D_i) / (μ_p * A_cross)
 end
 
-# 熱伝達係数の計算
-function calc_vapor_quality(T, α, FLUID) # 蒸気クオリティ計算
+# --- クオリティ・ボイド率 ---
+function calc_vapor_quality(T, α, FLUID)
     α_t = void_correction(α)
     denom = (α_t * calc_ρ_2p(T, 1.0, FLUID) + (1 - α_t) * calc_ρ_2p(T, 0.0, FLUID))
     if denom < 1e-10
@@ -279,8 +275,8 @@ function calc_vapor_quality(T, α, FLUID) # 蒸気クオリティ計算
     return α_t * calc_ρ_2p(T, 1.0, FLUID) / denom
 end
 
-function calc_void_rate(T, x, FLUID) # ボイド率計算
-    x_t =  vapor_quality_correction(x)
+function calc_void_rate(T, x, FLUID)
+    x_t = vapor_quality_correction(x)
     denom = (x_t * calc_ρ_2p(T, 0.0, FLUID) + (1 - x_t) * calc_ρ_2p(T, 1.0, FLUID))
     if denom < 1e-10
         return 0.0
@@ -288,6 +284,7 @@ function calc_void_rate(T, x, FLUID) # ボイド率計算
     return x_t * calc_ρ_2p(T, 0.0, FLUID) / denom
 end
 
+# --- 熱伝達率・流量 ---
 function calc_h_ec_gr(T, P, m, D_i, A_cross, L, FLUID)
     Re = calc_Re_1p(T, P, m, D_i, A_cross, FLUID)
     Pr = calc_Pr_1p(T, P, FLUID)
@@ -298,7 +295,6 @@ function calc_h_ec_gr(T, P, m, D_i, A_cross, L, FLUID)
     else
         Nu = 0.0371 * Pr * Re^0.8
     end
-
     return Nu * k / L
 end
 
@@ -323,16 +319,15 @@ function calc_h_wall_f_2p(T, α, m, D_i, A_cross, FLUID)
     return 0.023 * (Re^0.8) * (Pr^0.4) * k * ((1 - x)^0.8 + (3.8 * (x^0.76) * (1 - x)^0.04) / Pr^0.38) / D_i
 end
 
-# 質量流量計算
-function calc_mass_flow_init(T_ev, T_ec, A, h_ev, FLUID) # ウィックでの蒸発量をもとに全体の質量流量を計算 
-    λ = calc_latent_heat(T_ev, FLUID) # [J/kg]
+function calc_mass_flow_init(T_ev, T_ec, A, h_ev, FLUID)
+    λ = calc_latent_heat(T_ev, FLUID)
     if λ < 1e-10
         return 0.0
     end
-    return (h_ev * A) * (T_ec - T_ev) / λ # [kg/s]
+    return (h_ev * A) * (T_ec - T_ev) / λ
 end
 
-# 圧損計算
+# --- 圧損 ---
 function calc_τ_wall(T, P, m, D_i, A_cross, FLUID)
     Re = calc_Re_1p(T, P, m, D_i, A_cross, FLUID)
     ρ = calc_ρ_1p(T, P, FLUID)
@@ -342,17 +337,16 @@ function calc_τ_wall(T, P, m, D_i, A_cross, FLUID)
     else
         f = 0.316 / (Re^0.25)
     end
-
-    return f * (ρ * v^2) / 8 # 液損のほうが大きいのは，1/A ~ 1/(D^2)，1/Re ~ 1/Dの効果が大きい
+    return f * (ρ * v^2) / 8
 end
 
-function calc_τ_wall_sat(T, m_p, D_i, A_cross, phase::Symbol, FLUID) # 飽和気体もしくは液体のどちらかを指定してせん断応力を計算する関数
+function calc_τ_wall_sat(T, m_p, D_i, A_cross, phase::Symbol, FLUID)
     if phase == :liquid
         Re = calc_Re_sat(T, m_p, D_i, A_cross, :liquid, FLUID)
-        ρ = PropsSI("D", "T", T, "Q", 0.0, FLUID)
+        ρ = PROPYLENE_DATA[].D_sat_f_T(T)
     elseif phase == :vapor
         Re = calc_Re_sat(T, m_p, D_i, A_cross, :vapor, FLUID)
-        ρ = PropsSI("D", "T", T, "Q", 1.0, FLUID)
+        ρ = PROPYLENE_DATA[].D_sat_g_T(T)
     else
         error("invalid phase")
     end
@@ -366,7 +360,7 @@ function calc_τ_wall_sat(T, m_p, D_i, A_cross, phase::Symbol, FLUID) # 飽和�
     return f * (ρ * v^2) / 8
 end
 
-function calc_ΔP_2p(T, α, m, D_i, A_cross, FLUID) # 二相流の圧損 [Pa/m]
+function calc_ΔP_2p(T, α, m, D_i, A_cross, FLUID)
     x = calc_vapor_quality(T, α, FLUID)
     m_l = (1 - x) * m
     m_v = x * m
@@ -389,21 +383,20 @@ function calc_ΔP_2p(T, α, m, D_i, A_cross, FLUID) # 二相流の圧損 [Pa/m]
     return ΔP_l + ΔP_v + C * sqrt(ΔP_l * ΔP_v)
 end
 
-# 二相流検知関数
-function TPcheck(T, P, FLUID) # 凝縮器での二相流検知
+# --- チェック & エネルギー ---
+function TPcheck(T, P, FLUID)
     Psat = calc_Psat(T, FLUID)
     if abs(P - Psat) / P <= 1e-1
         return :tp
     else
         if P < Psat
-            return :vapor # vapor
+            return :vapor
         else
-            return :liquid # liquid
+            return :liquid
         end
     end
 end
 
-# Tccをとってくる関数
 function load_T_cc_only()
     # 保存時と同じファイルパス
     filename = "./res/Q_Ts/Q_Ts.csv"
@@ -420,7 +413,6 @@ function load_T_cc_only()
     return T_cc_data
 end
 
-# 過渡解析中のウィック回りの計算で用いる
 function calc_wick_energy(T, V, FLUID)
     Φ = 0.56
     E_wick = V * (1 - Φ) * ρ_sus304(T) * c_sus304(T) * T

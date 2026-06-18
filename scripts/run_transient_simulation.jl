@@ -15,7 +15,10 @@ geo = LHPGeometry(
     CCGeometry(N=1, L=0.07, D_i=0.035, D_o=0.037)       # CC
 )
 
-transient_condition = LHPTransientCondition(Q_apply_init = 50.0)
+# 条件設定
+transient_condition = LHPTransientCondition(Q_apply_init = 50.0, Q_apply = 60.0, dt = 0.1, t_init = 0.0, t_end = 1.0)
 
-vars = initialize_transient_vars(geo)
-vars = load_initial_vars_from_csv(geo, transient_condition)
+init_propylene_lookups()
+
+# 
+solve_transient_lhp!(geo, transient_condition)

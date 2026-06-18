@@ -10,11 +10,14 @@ geo = LHPGeometry(
     GrvGeometry(),                                      # グルーブ
     TLGeometry(N=200, L=2, D_i=0.00435, D_o=0.00635),    # 蒸気管
     CondGeometry(N=200, L=1.0, D_i=0.00435, D_o=0.00635),  # 凝縮器 
-    TLGeometry(N=200, L=2, D_i=0.00218, D_o=0.00318),    # 液管
+    # TLGeometry(N=200, L=2, D_i=0.00218, D_o=0.00318),    # 液管
+    TLGeometry(N=200, L=2, D_i=0.00435, D_o=0.00635),    # 液管（蒸気管と同じ太さ）
     TLGeometry(N=100, L=0.08, D_i=0.0018, D_o=0.0018),    # バイヨネット管
     CCGeometry(N=1, L=0.07, D_i=0.035, D_o=0.037)       # CC
 )
-steady_condition = LHPSteadyCondition(Q_apply = 50.0) # 50Wで計算したい場合
+steady_condition = LHPSteadyCondition(Q_apply = 60.0) # 50Wで計算したい場合
+
+init_propylene_lookups()
 
 # 2. 初期化と計算
 vars = initialize_steady_vars(geo)

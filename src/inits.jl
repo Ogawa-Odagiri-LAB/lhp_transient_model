@@ -11,13 +11,13 @@ end
 
 function initialize_transient_vars(geo::LHPGeometry)
     return ComponentArray(
-        wick    = (T=zeros(geo.wick.N), P=zeros(geo.wick.N),    α=ones(geo.wick.N),     m=zeros(geo.wick.N)),
+        wick    = (T_in, m_wick),
         grv     = (T=zeros(geo.grv.N),  P=zeros(geo.grv.N),     α=ones(geo.grv.N),      m=zeros(geo.grv.N),     T_wall=zeros(geo.grv.N)),
         vl      = (T=zeros(geo.vl.N),   P=zeros(geo.vl.N),      α=ones(geo.vl.N),       m=zeros(geo.vl.N),      T_wall=zeros(geo.vl.N)),
         cond    = (T=zeros(geo.cond.N), P=zeros(geo.cond.N),    α=ones(geo.cond.N),     m=zeros(geo.cond.N),    T_wall=zeros(geo.cond.N)),
         ll      = (T=zeros(geo.ll.N),   P=zeros(geo.ll.N),      α=zeros(geo.ll.N),      m=zeros(geo.ll.N),      T_wall=zeros(geo.ll.N)),
         bay     = (T=zeros(geo.bay.N),  P=zeros(geo.bay.N),     α=zeros(geo.bay.N),     m=zeros(geo.bay.N),     T_wall=zeros(geo.bay.N)),
-        cc      = (T=zeros(geo.cc.N),   P=zeros(geo.cc.N),      α=zeros(geo.cc.N),      m=zeros(geo.cc.N),      T_wall=zeros(geo.cc.N))
+        cc      = (T_cc, α_cc, T_wall)
     )
 end
 
@@ -88,10 +88,8 @@ function load_initial_vars_from_csv(geo::LHPGeometry, transient_condition)
     return ComponentArray(
         # ウィック: 1番目をll[1]、2番目をgrv[1]の値にする
         wick = (
-            T = [ll_T[geo.ll.N], grv_T[1]], 
-            P = [ll_P[geo.ll.N], grv_P[1]], 
-            α = [0.0, 0.0], 
-            m = fill(init_m, geo.wick.N)
+            T_in = ll_T[geo.ll.N], 
+            m_wick = init_m
         ),
         grv = (
             T = grv_T,  
@@ -130,11 +128,20 @@ function load_initial_vars_from_csv(geo::LHPGeometry, transient_condition)
             T_wall = fill(ll_T[geo.ll.N], geo.bay.N) # T_wall も同様に ll[1] から流用
         ),
         cc = (
-            T = cc_T,   
-            P = cc_P,      
-            α = cc_α,       
-            m = fill(init_m, geo.cc.N),      
-            T_wall = fill(cc_T[1], geo.cc.N)
+            T_cc = cc_T[1],   
+            α_cc = cc_α[1], 
+            T_wall = cc_T[1]
         )
+    )
+end
+
+function prepare_f_res(geo::LHPGeometry)
+    return ComponentArray(
+        wick  = zeros(2),
+        cc    = zeros(2),
+        mass  = (grv=zeros(geo.grv.N), vl=zeros(geo.vl.N), cond=zeros(geo.cond.N), ll=zeros(geo.ll.N), bay=zeros(geo.bay.N)),
+        mom   = (grv=zeros(geo.grv.N), vl=zeros(geo.vl.N), cond=zeros(geo.cond.N), ll=zeros(geo.ll.N), bay=zeros(geo.bay.N)),
+        ene   = (grv=zeros(geo.grv.N), vl=zeros(geo.vl.N), cond=zeros(geo.cond.N), ll=zeros(geo.ll.N), bay=zeros(geo.bay.N)),
+        state = (grv=zeros(geo.grv.N), vl=zeros(geo.vl.N), cond=zeros(geo.cond.N), ll=zeros(geo.ll.N), bay=zeros(geo.bay.N))
     )
 end
