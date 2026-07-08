@@ -72,7 +72,7 @@ function calc_cond!(vars, m, geo, T_cond, FLUID)
     α(idx) = calc_void_rate(vars.cond.T[idx], vars.cond.x[idx], FLUID)
     λ(idx) = calc_latent_heat(vars.cond.T[idx], FLUID)
     ΔP_2p(idx) = calc_ΔP_2p(vars.cond.T[idx], α(idx), m, D_i, A_cross, FLUID)
-    h_wall_f_2p(idx) = calc_h_wall_f_2p(vars.cond.T[idx], α(idx), m, D_i, A_cross, FLUID)
+    h_wall_f_2p(idx) = calc_h_condense(vars.cond.T[idx], vars.cond.P[idx], α(idx), m, D_i, A_cross, FLUID)
     tp_flag::Symbol = :v # 二相状態の計算に入るかどうか, 初期値は:v(vapor), 二相状態になったら:tp(TwoPhase), 液相になったら:l(liquid)
 
     # println("cond!")
@@ -101,9 +101,11 @@ function calc_cond!(vars, m, geo, T_cond, FLUID)
                 tp_flag = :l # 液相開始
                 # println("liquid starts!")
                 vars.cond.x[i] = 0.0
+                vars.cond.α[i] = 0.0
             end
         elseif tp_flag == :l # 液相領域
             vars.cond.x[i] = 0.0
+            vars.cond.α[i] = 0.0
         end
         # println("T=$(vars.cond.T[i]), P=$(vars.cond.P[i]), x=$(vars.cond.x[i])")
     end
@@ -149,7 +151,7 @@ function calc_bay!(u, vars, m, geo, FLUID)
     α(idx) = calc_void_rate(vars.bay.T[idx], vars.bay.x[idx], FLUID)
     λ(idx) = calc_latent_heat(vars.bay.T[idx], FLUID)
     ΔP_2p(idx) = calc_ΔP_2p(vars.bay.T[idx], α(idx), m, D_i, A_cross, FLUID)
-    h_wall_f_2p(idx) = calc_h_wall_f_2p(vars.bay.T[idx], α(idx), m, D_i, A_cross, FLUID)
+    h_wall_f_2p(idx) = calc_h_condense(vars.bay.T[idx], vars.bay.P[idx], α(idx), m, D_i, A_cross, FLUID)
     tp_flag::Symbol = :l # 二相状態の計算に入るかどうか, 初期値は:l(liquid), 二相状態になったら:tp(TwoPhase), 気相になったら:v(vapor)
 
     # println("bay!")
@@ -218,7 +220,7 @@ function calc_residual!(f_res, u, vars, geo, condition, Q_nom)
     T_cc = T_ev - dTdP * ΔP_grv_cc
 
     # 熱漏れとサブクールのバランス
-    cp = PropsSI("C", "T", T_cc, "Q", 0.0, FLUID)
+    cp = calc_cp_2p(T_cc, 0.0, FLUID)
 
     # 残差方程式
     f_res_t[1] = Q_leak - (2 * π * k_eff * L_wick) * (T_ev - T_cc) / (log(geo.grv.D_o / geo.grv.D_i)) - (G_ec_cc * (T_ec - T_cc))# CCへの熱漏れ
