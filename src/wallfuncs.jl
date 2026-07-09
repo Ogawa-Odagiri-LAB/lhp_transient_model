@@ -107,7 +107,7 @@ function wall_cc(var_old, T_wall_old, geo, condition)
     Q_amb = 0.0
 
     # Q_fluid
-    Q_fluid = calc_Q_fluid(k, geo.cc.D_o, geo.cc.D_i, var_old.cc.T, T_cc)
+    Q_fluid = calc_Q_fluid(k, geo.cc.D_o, geo.cc.D_i, var_old.cc.T[1], T_cc)
 
     # specific heat
     C = ((geo.cc.D_o^2 - geo.cc.D_i^2) * 0.25 * geo.cc.L) * ρ_sus304(T_wall_old.cc) * c_sus304(T_wall_old.cc) 

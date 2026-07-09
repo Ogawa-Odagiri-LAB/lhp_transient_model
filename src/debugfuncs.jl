@@ -49,69 +49,69 @@ end
 function set_values_on_lb!(var)    
     # T
     var.wick   .= 273.15 # 303.0
-    var.grv.T   = 273.15
+    var.grv.T  .= 273.15
     var.vl.T   .= 273.15
     var.cond.T .= 273.15
     var.ll.T   .= 273.15
-    var.cc.T    = 273.15
+    var.cc.T   .= 273.15
 
     # P
     # var.wick
-    var.grv.P   = 0.0
+    var.grv.P  .= 0.0
     var.vl.P   .= 0.0
     var.cond.P .= 0.0
     var.ll.P   .= 0.0
-    var.cc.P    = 0.0
+    var.cc.P   .= 0.0
 
     # α
     # var.wick
-    var.grv.α   = -Inf
+    var.grv.α  .= -Inf
     var.vl.α   .= -Inf
     var.cond.α .= -Inf
     var.ll.α   .= -Inf
-    var.cc.α    = -Inf
+    var.cc.α   .= -Inf
 
     # m
     # var.wick
-    var.grv.m   = 0.0
+    var.grv.m  .= 0.0
     var.vl.m   .= 0.0
     var.cond.m .= 0.0
     var.ll.m   .= 0.0
-    var.cc.m    = 0.0    
+    var.cc.m   .= 0.0    
 end
 
 function set_values_on_ub!(var)    
     # T
     var.wick   .= Inf # 303.0
-    var.grv.T   = Inf
+    var.grv.T  .= Inf
     var.vl.T   .= Inf
     var.cond.T .= Inf
     var.ll.T   .= Inf
-    var.cc.T    = Inf
+    var.cc.T   .= Inf
 
     # P
     # var.wick
-    var.grv.P   = Inf
+    var.grv.P  .= Inf
     var.vl.P   .= Inf
     var.cond.P .= Inf
     var.ll.P   .= Inf
-    var.cc.P    = Inf
+    var.cc.P   .= Inf
 
     # α
     # var.wick
-    var.grv.α   = Inf
+    var.grv.α  .= Inf
     var.vl.α   .= Inf
     var.cond.α .= Inf
     var.ll.α   .= Inf
-    var.cc.α    = Inf
+    var.cc.α   .= Inf
 
     # m
     # var.wick
-    var.grv.m   = Inf
+    var.grv.m  .= Inf
     var.vl.m   .= Inf
     var.cond.m .= Inf
     var.ll.m   .= Inf
-    var.cc.m    = Inf    
+    var.cc.m   .= Inf    
 end
 
 function initialize_T_wall(geo::LHPGeometry)
