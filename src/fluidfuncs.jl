@@ -240,14 +240,14 @@ function fluid_cc(res_mass, res_mom, res_ene, res_state, m_evap, var, var_old, T
     D_i = geo.cc.D_i # 代表長さとして
     D_o = geo.cc.D_o
 
-    T = var.cc.T
-    T_old = var_old.cc.T
+    T = var.cc.T[1]
+    T_old = var_old.cc.T[1]
     T_w = T_wall.cc
-    P = var.cc.P
+    P = var.cc.P[1]
     α = α_cropper(var.cc.α[1])
     α_old = α_cropper(var_old.cc.α[1])
-    m = var.cc.m
-    m_old = var_old.cc.m
+    m = var.cc.m[1]
+    m_old = var_old.cc.m[1]
 
     T_1 = var.ll.T[end]
     P_1 = var.ll.P[end]
