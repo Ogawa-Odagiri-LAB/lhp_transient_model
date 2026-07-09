@@ -488,8 +488,8 @@ function calc_Q_grv(m_evap, var, T_wall, geo, condition)
     L = geo.grv.L
 
     T_ec   = T_wall.evap
-    T_grv  = var.grv.T
-    P_grv  = var.grv.P
+    T_grv  = var.grv.T[1]
+    P_grv  = var.grv.P[1]
 
     h_ec_grv = calc_h_ec_gr(T_grv, P_grv, m_evap, height, A_grv_cross, L, FLUID)
 
