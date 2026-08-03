@@ -167,11 +167,10 @@ function fluid_cond!(res_mass, res_mom, res_ene, res_state, var, var_old, T_wall
         m_2 = (i == N) ? var.ll.m[1] : var.cond.m[i+1]
 
         # Q_wall
-        if α == 1.0 || α == 0.0
-            h = calc_h_wall_f_1p(T, P, m, D_i, A_cross, FLUID)
-        else
-            h = calc_h_condense(T, P, α, m, D_i, A_cross, FLUID)
-        end
+        h_sp = calc_h_wall_f_1p(T, P, m, D_i, A_cross, FLUID)
+        h_tp = calc_h_condense(T, P, α, m, D_i, A_cross, FLUID)
+        bal = abs(α - 0.5) / 0.5
+        h = h_sigmoid(bal, h_sp, h_tp) # シグモイド関数で滑らかに接続
         Q_wall = calc_Q_conv(h, S, T, T_w)
 
         # residuals
