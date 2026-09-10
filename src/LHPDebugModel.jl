@@ -4,7 +4,7 @@ using CSV, ComponentArrays, CoolProp, DataFrames, DifferentiationInterface, Line
 
 export LHPGeometry, WickGeometry, GrvGeometry, TLGeometry, CondGeometry, CCGeometry, LHPTransientCondition, PropyleneLookups, AmmoniaLookups, FluidLookups
 export init_propylene_lookups,init_ammonia_lookups, init_fluid_lookups
-export initialize_transient_var, set_values_on_var!, initialize_T_wall, set_values_on_T_wall!, initialize_f, set_values_on_var_from_steady, set_values_on_T_wall_from_steady
+export initialize_transient_var, set_values_on_var!, initialize_T_wall, set_values_on_T_wall!, initialize_f, set_values_on_var_from_steady, set_values_on_T_wall_from_steady, set_values_on_lb!, set_values_on_ub!
 export Euler_wall!, RK4_wall!
 export fluid_wick, fluid_grv, fluid_vl!, fluid_cond!, fluid_ll!, fluid_cc
 export save_T_wall_to_csv, save_var_to_csv, save_f_to_csv

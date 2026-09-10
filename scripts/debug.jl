@@ -20,16 +20,32 @@ geo = LHPGeometry(
     # TLGeometry(N=5, L=0.08, D_i=0.0018, D_o=0.0018),      # バイヨネット管
     CCGeometry(N=1, L=0.07, D_i=0.035, D_o=0.037)         # CC
 )
-
+init_fluid_lookups(transient_condition.fluid, T_min=230.0, T_max=360.0, P_max=4.5e6)
 var = initialize_transient_var(geo)
-T_wall = initialize_T_wall(geo)
-f = initialize_f(geo)
+set_values_on_var!(var, transient_condition)
+var_old = copy(var)
+lb = copy(var)
+ub = copy(var)
+set_values_on_lb!(lb)
+set_values_on_ub!(ub)
 
-var = set_values_on_var_from_steady(geo, 20)
-T_wall = set_values_on_T_wall_from_steady(geo, transient_condition)
+# T_wall = set_values_on_T_wall_from_steady(geo, transient_condition)
+T_wall = initialize_T_wall(geo)
+T_wall_old = copy(T_wall)
+
+# scaling
+scaled_var = scale_var(var, geo, transient_condition)
+lb_scaled = scale_var(lb, geo, transient_condition)
+ub_scaled = scale_var(ub, geo, transient_condition)
+
+# var = set_values_on_var_from_steady(geo, 20)
+# T_wall = set_values_on_T_wall_from_steady(geo, transient_condition)
 
 save_T_wall_to_csv(T_wall, geo, "T_wall")
+save_T_wall_to_csv(T_wall_old, geo, "T_wall_old")
 save_var_to_csv(0.0, var, geo, "var")
+save_var_to_csv(0.0, scaled_var, geo, "scaled_var")
+save_var_to_csv(0.0, var_old, geo, "var_old")
 
 # init_fluid_lookups(transient_condition.fluid, T_min=230.0, T_max=360.0, P_max=4.5e6)
 

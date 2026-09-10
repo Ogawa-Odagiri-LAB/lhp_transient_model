@@ -128,9 +128,9 @@ function plot_transient_component_nodes(varname, dir_path="./res/vars_transient/
         # ※確実に値を取得するため、該当行の最初の1要素（[1]）を抽出
         push!(t_wick, df[(df.Component .== "wick") .& (df.Node .== 1), :T][1])
         push!(t_grv,  df[(df.Component .== "grv")  .& (df.Node .== 1), :T][1])
-        push!(t_vl,   df[(df.Component .== "vl")   .& (df.Node .== 10), :T][1])
-        push!(t_cond, df[(df.Component .== "cond") .& (df.Node .== 10), :T][1])
-        push!(t_ll,   df[(df.Component .== "ll")   .& (df.Node .== 10), :T][1])
+        push!(t_vl,   df[(df.Component .== "vl")   .& (df.Node .== 1), :T][1])
+        push!(t_cond, df[(df.Component .== "cond") .& (df.Node .== 1), :T][1])
+        push!(t_ll,   df[(df.Component .== "ll")   .& (df.Node .== 1), :T][1])
         push!(t_cc,   df[(df.Component .== "cc")   .& (df.Node .== 1), :T][1])
     end
 

@@ -421,6 +421,13 @@ function calc_ΔP_2p(T, α, m, D_i, A_cross, FLUID)
         C = 10
     elseif Re_l < 2300 && Re_v < 2300
         C = 5
+    else
+        C = 0
+        @show Re_l
+        @show Re_v
+        @show T
+        @show m
+        @show x
     end
 
     ΔP_l = π * D_i * calc_τ_wall_sat(T, m_l, D_i, A_cross, :liquid, FLUID) / A_cross
@@ -584,4 +591,12 @@ end
 
 function α_cropper(α)
     return clamp(α, 0.0, 1.0)
+end
+
+function h_sigmoid(bal, h_sp, h_tp; k=5.0)
+    # シグモイド関数で割合 t を計算
+    t = 1.0 / (1.0 + exp(-k * (bal - 1.0)))
+    
+    # 線形補間
+    return (1.0 - t) * h_sp + t * h_tp
 end

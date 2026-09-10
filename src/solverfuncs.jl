@@ -112,14 +112,20 @@ function solve_transient_lhp!(geo, transient_condition)
     dt = transient_condition.dt
 
     # initialize
-    var = set_values_on_var_from_steady(geo, 20)
+    # var = set_values_on_var_from_steady(geo, 20)
+
+    # var = initialize_transient_var(geo)
+    # set_values_on_var!(var, transient_condition)
+    var = set_smooth_values_on_var(geo, transient_condition)
     var_old = copy(var)
     lb = copy(var)
     ub = copy(var)
     set_values_on_lb!(lb)
     set_values_on_ub!(ub)
 
-    T_wall = set_values_on_T_wall_from_steady(geo, transient_condition)
+    # T_wall = set_values_on_T_wall_from_steady(geo, transient_condition)
+    T_wall = initialize_T_wall(geo)
+    set_values_on_T_wall!(T_wall, geo, transient_condition)
     T_wall_old = copy(T_wall)
 
     # scaling
@@ -155,7 +161,7 @@ function solve_transient_lhp!(geo, transient_condition)
         #     autodiff = AutoFiniteDiff(),
         #     vjp_autodiff = nothing
         # )
-        sol = solve(prob, algorithm; show_trace = Val(true), abstol=2.5e-3, maxiters=20)
+        sol = solve(prob, algorithm; show_trace = Val(true), abstol=2.5e-3, maxiters=30)
 
         T_wall_old .= params.T_wall
         scaled_var .= sol.u

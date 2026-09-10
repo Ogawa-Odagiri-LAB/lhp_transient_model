@@ -46,6 +46,72 @@ function set_values_on_var!(var, condition)
     var.cc.m    = 0.00015    
 end
 
+function set_smooth_values_on_var(geo, condition)
+    FLUID = condition.fluid
+
+    wick_T = fill(23.0 + 273.15, geo.wick.N)
+
+    grv_T  = 23.0 + 273.15
+    grv_P  = calc_Psat(grv_T, FLUID)
+    grv_α  = 1.0
+    grv_m  = 0.00015
+
+    vl_T   = collect(range(23.0 + 273.15, 20.0 + 273.15, geo.vl.N)) 
+    vl_P   = collect(range(calc_Psat(23.0 + 273.15, FLUID), calc_Psat(20.0 + 273.15, FLUID), geo.vl.N))
+    vl_α   = fill(1.0 - 1.0e-4, geo.vl.N)
+    vl_m   = fill(0.00015, geo.vl.N)
+
+    cond_T = fill(20.0 + 273.15, geo.cond.N)
+    cond_P = fill(calc_Psat(20.0 + 273.15, FLUID), geo.cond.N)
+    cond_α = collect(range(1.0, 0.0, geo.cond.N))
+    cond_m = fill(0.00015, geo.cond.N)
+
+    ll_T   = collect(range(20.0 + 273.15, 23.0 + 273.15, geo.ll.N))
+    ll_P   = collect(range(calc_Psat(20.0 + 273.15, FLUID), calc_Psat(23.0 + 273.15, FLUID), geo.ll.N))
+    ll_α   = fill(0.0 + 1.0e-4, geo.ll.N)
+    ll_m   = fill(0.00015, geo.ll.N)
+    
+    cc_T   = 23.0 + 273.15
+    cc_P   = calc_Psat(cc_T, FLUID)
+    cc_α   = 0.5
+    cc_m  = 0.00015
+
+    return ComponentArray(
+            wick    = 
+                wick_T,
+            grv     = (
+                T= grv_T,
+                P= grv_P,
+                α= grv_α,
+                m= grv_m,
+            ),
+            vl      = (
+                T= vl_T,
+                P= vl_P,
+                α= vl_α,
+                m= vl_m,
+            ),
+            cond      = (
+                T= cond_T,
+                P= cond_P,
+                α= cond_α,
+                m= cond_m,
+            ),
+            ll      = (
+                T= ll_T,
+                P= ll_P,
+                α= ll_α,
+                m= ll_m,
+            ),
+            cc      = (
+                T= cc_T,
+                P= cc_P,
+                α= cc_α,
+                m= cc_m,
+            ),
+        )
+end
+
 function set_values_on_lb!(var)    
     # T
     var.wick   .= 273.15 # 303.0
@@ -124,12 +190,12 @@ function initialize_T_wall(geo::LHPGeometry)
     )
 end
 
-function set_values_on_T_wall!(T_wall, condition)
-    T_wall.evap  = 325.0 # 318.0
-    T_wall.vl   .= 300.0
-    T_wall.cond .= 288.0
-    T_wall.ll   .= 300.0
-    T_wall.cc    = 300.0
+function set_values_on_T_wall!(T_wall, geo, condition)
+    T_wall.evap  = 23.0 + 273.15 # 318.0
+    T_wall.vl    = collect(range(23.0 + 273.15, 20.0 + 273.15, geo.vl.N))
+    T_wall.cond .= 20.0 + 273.15
+    T_wall.ll    = collect(range(20.0 + 273.15, 23.0 + 273.15, geo.ll.N))
+    T_wall.cc    = 23.0 + 273.15
 end
 
 function initialize_f(geo::LHPGeometry)
@@ -253,6 +319,7 @@ function set_values_on_var_from_steady(geo, Q_apply)
     grv_T  = get_comp_data(:grv,  :T, geo.grv.N)
     grv_P  = get_comp_data(:grv,  :P, geo.grv.N)
     grv_α  = get_comp_data(:grv,  :α, geo.grv.N)
+    grv_m  = fill(m_st, geo.grv.N)
 
     vl_T   = get_comp_data(:vl,   :T, geo.vl.N)
     vl_P   = get_comp_data(:vl,   :P, geo.vl.N)
@@ -269,14 +336,15 @@ function set_values_on_var_from_steady(geo, Q_apply)
     cc_T   = get_comp_data(:cc,   :T, geo.cc.N)
     cc_P   = get_comp_data(:cc,   :P, geo.cc.N)
     cc_α   = get_comp_data(:cc,   :α, geo.cc.N)
+    cc_m   = fill(m_st, geo.cc.N)
 
     return ComponentArray(
         wick    = fill(T_ev, geo.wick.N),
         grv     = (
-            T= grv_T,
-            P= grv_P,
-            α= grv_α,
-            m= fill(m_st, geo.grv.N)
+            T= grv_T[1],
+            P= grv_P[1],
+            α= grv_α[1],
+            m= grv_m[1]
         ),
         vl      = (
             T= vl_T,   
@@ -297,10 +365,10 @@ function set_values_on_var_from_steady(geo, Q_apply)
             m= fill(m_st, geo.ll.N)
         ),
         cc      = (
-            T= cc_T,   
-            P= cc_P,      
-            α= cc_α,      
-            m= fill(m_st, geo.cc.N)
+            T= cc_T[1],   
+            P= cc_P[1],      
+            α= cc_α[1],      
+            m= cc_m[1]
         ),
     )
     println("var is imported from steady analysis")
