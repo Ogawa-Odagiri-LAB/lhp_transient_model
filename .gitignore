@@ -29,3 +29,7 @@ JuliaLocalPreferences.toml
 
 # 結果格納ディレクトリは無視
 /res/
+
+out.txt
+
+*.jls

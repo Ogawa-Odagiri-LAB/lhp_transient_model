@@ -1,0 +1,32 @@
+src/
+├── LHPTransientModel.jl      # エントリポイント(includeの列挙のみ)
+│
+├── types.jl                  # ジオメトリ・運転条件の構造体(既存を踏襲、一部追加)
+│
+├── proptables.jl             # ★新規: (ρ,h)2次元flashテーブル + 1次元飽和テーブル
+├── propaccess.jl             # ★新規: Level2相当。テーブルへの統一アクセス関数
+│
+├── smoothing.jl               # ★新規: Level0。tanh/べき乗ブレンド、soft-clamp、soft-abs
+├── correlations.jl            # ★新規: Level1。無次元数ベースの個別相関式(純粋関数)
+├── heattransfer.jl            # ★新規: Level3+4。領域ブレンド済み相関+コンポーネント別ディスパッチ
+│
+├── geometry_cc.jl             # ★新規: CCの気液分離幾何(θ-f_l関係、断面積・接触弧長)
+│
+├── residuals_transport.jl     # ★改修: 輸送管(vl/cond/ll)の7変数DAE残差(式14-20)
+├── residuals_wick.jl          # ★改修: ウィックのE,T残差(式46-48)
+├── residuals_evapcase.jl      # ★改修: 蒸発器ケースのT_ec残差(式41-45)
+├── residuals_cc.jl            # ★改修: CCの残差(気液分離+自然対流)
+├── residuals_wall.jl          # ★改修: 管壁T_wallの残差(式7,20,39,40)
+├── residuals_main.jl          # ★新規: 上記を束ねる全体の f_dae_residual!
+│
+├── sparsity.jl                # ★新規: jac_prototypeの構築
+├── initialcondition.jl        # ★新規: 整合初期条件(u0, du0)の構築・検証
+│
+├── solverfuncs.jl             # ★改修: DAEProblem組み立て + IDA呼び出し
+├── savefuncs.jl               # 既存を踏襲(出力形式がComponentArrayのままなら変更小)
+├── plots.jl                   # 既存を踏襲
+└── debugfuncs.jl              # 既存を踏襲、診断用(Ra,Re等の中間変数ダンプ)
+
+scripts/
+├── transient.jl                # エントリスクリプト(既存のtransient.jlを更新)
+└── build_tables.jl             # ★新規: テーブルを事前構築してシリアライズ(後述)
