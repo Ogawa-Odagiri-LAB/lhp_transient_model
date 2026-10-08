@@ -66,4 +66,5 @@ function ρ_sus304(T)
     y = curve_fit(PARAMS_LE_SUS304, T)
     thermal_strain = y * 1e-5
     return 7930.0 / (1.0 + thermal_strain)^3
+
 end
