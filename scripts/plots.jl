@@ -45,7 +45,7 @@ function plot_T_wall(varname)
 end
 
 function plot_var(varname)
-    res_file = "./res/vars_transient/" * varname * ".csv" 
+    res_file = "./res/vars_transient/" * varname * "_1.0s" * ".csv" 
     df_plot = CSV.read(res_file, DataFrame)
 
     # Temperature
@@ -234,4 +234,4 @@ plot_transient_component_nodes("var")
 # plot_transient_T_wall_nodes("T_wall")
 # plot_T_wall("T_wall")
 # plot_T_wall("T_wall_old")
-# plot_var("var")
+plot_var("var")

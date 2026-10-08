@@ -4,14 +4,14 @@ using Pkg; Pkg.activate(".") # プロジェクト環境のアクティベート
 push!(LOAD_PATH, joinpath(@__DIR__, "../src"))
 using LHPTransientModel
 
-transient_condition = LHPTransientCondition(fluid = "ammonia", T_cond = 10.0 + 273.15, Q_apply_init = 20.0, Q_apply = 10.0, ΔT_startup = 0.0, dt = 0.005, t_init = 0.0, t_end = 0.1) # dt=0.1だと5.0e0, dt=0.01だと1.0e-3までいく
+transient_condition = LHPTransientCondition(fluid = "ammonia", T_cond = 10.0 + 273.15, Q_apply_init = 20.0, Q_apply = 30.0, ΔT_startup = 0.0, dt = 0.1, t_init = 0.0, t_end = 1.0) # dt=0.1だと5.0e0, dt=0.01だと1.0e-3までいく
 
 geo = LHPGeometry(
-    WickGeometry(N=3),
+    WickGeometry(N=6),
     GrvGeometry(N=1),                                     # グルーブ
-    TLGeometry(N=20, L=2, D_i=0.00435, D_o=0.00635),      # 蒸気管
-    CondGeometry(N=50, L=1.0, D_i=0.00435, D_o=0.00635),  # 凝縮器 
-    TLGeometry(N=20, L=2, D_i=0.00218, D_o=0.00318),      # 液管
+    TLGeometry(N=100, L=2, D_i=0.00435, D_o=0.00635),      # 蒸気管
+    CondGeometry(N=300, L=1.0, D_i=0.00435, D_o=0.00635),  # 凝縮器 
+    TLGeometry(N=100, L=2, D_i=0.00218, D_o=0.00318),      # 液管
     # TLGeometry(N=5, L=0.08, D_i=0.0018, D_o=0.0018),      # バイヨネット管
     CCGeometry(N=1, L=0.07, D_i=0.035, D_o=0.037)         # CC
 )

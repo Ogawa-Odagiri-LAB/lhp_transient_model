@@ -54,27 +54,27 @@ function set_smooth_values_on_var(geo, condition)
     grv_T  = 23.0 + 273.15
     grv_P  = calc_Psat(grv_T, FLUID)
     grv_α  = 1.0
-    grv_m  = 0.00015
+    grv_m  = 6 * 10^(-6)
 
     vl_T   = collect(range(23.0 + 273.15, 20.0 + 273.15, geo.vl.N)) 
     vl_P   = collect(range(calc_Psat(23.0 + 273.15, FLUID), calc_Psat(20.0 + 273.15, FLUID), geo.vl.N))
     vl_α   = fill(1.0 - 1.0e-4, geo.vl.N)
-    vl_m   = fill(0.00015, geo.vl.N)
+    vl_m   = fill(6 * 10^(-6), geo.vl.N)
 
     cond_T = fill(20.0 + 273.15, geo.cond.N)
     cond_P = fill(calc_Psat(20.0 + 273.15, FLUID), geo.cond.N)
     cond_α = collect(range(1.0, 0.0, geo.cond.N))
-    cond_m = fill(0.00015, geo.cond.N)
+    cond_m = fill(6 * 10^(-6), geo.cond.N)
 
     ll_T   = collect(range(20.0 + 273.15, 23.0 + 273.15, geo.ll.N))
     ll_P   = collect(range(calc_Psat(20.0 + 273.15, FLUID), calc_Psat(23.0 + 273.15, FLUID), geo.ll.N))
     ll_α   = fill(0.0 + 1.0e-4, geo.ll.N)
-    ll_m   = fill(0.00015, geo.ll.N)
+    ll_m   = fill(6 * 10^(-6), geo.ll.N)
     
     cc_T   = 23.0 + 273.15
     cc_P   = calc_Psat(cc_T, FLUID)
     cc_α   = 0.5
-    cc_m  = 0.00015
+    cc_m  = 6 * 10^(-6)
 
     return ComponentArray(
             wick    = 
@@ -191,7 +191,7 @@ function initialize_T_wall(geo::LHPGeometry)
 end
 
 function set_values_on_T_wall!(T_wall, geo, condition)
-    T_wall.evap  = 23.0 + 273.15 # 318.0
+    T_wall.evap  = 25.0 + 273.15 # 318.0
     T_wall.vl    = collect(range(23.0 + 273.15, 20.0 + 273.15, geo.vl.N))
     T_wall.cond .= 20.0 + 273.15
     T_wall.ll    = collect(range(20.0 + 273.15, 23.0 + 273.15, geo.ll.N))

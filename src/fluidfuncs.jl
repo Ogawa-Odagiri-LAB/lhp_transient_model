@@ -5,27 +5,31 @@ function fluid_wick(var, var_old, T_wall, geo, condition) # 返り値 m_evap
     N = geo.wick.N
     D_in = geo.wick.D_i
     dD = geo.wick.dD
+    l_w = geo.wick.L
+    D_o = geo.wick.D_o
+    D_i = geo.wick.D_o - geo.wick.dD
+
+    Q_1 = 0.0
+    Q_2 = 0.0
+    T_1 = 0.0
+    T_2 = 0.0
+    res = zeros(N)
+    D_c(i) = D_in + (i - 0.5) * dD
+    G_wick(j) = 2π * l_w * 0.5 * (calc_k_eff(var.wick[j], FLUID) + calc_k_eff(var.wick[j+1], FLUID)) / log(D_c(j+1) / D_c(j))
 
     # m_evap
     T_ev = var.wick[end]
     T_cc = var.cc.T
     T_adj = var.wick[N-1]
     k_eff = calc_k_eff(T_ev, FLUID)
-    l_w = geo.wick.L
-    D_o = geo.wick.D_o
-    D_i = geo.wick.D_o - geo.wick.dD
     Q_ev = calc_Q_ev(var, T_wall, geo, condition)
-    Q_in = calc_Q_wick(k_eff, l_w, D_o, D_i, T_adj, T_ev)
+    Q_in = G_wick(N-1) * (var.wick[N-1] - var.wick[N])
     λ = calc_latent_heat(T_ev, FLUID)
     ΔT_ev_cc = abs(T_ev - T_cc)
     m_evap = (ΔT_ev_cc > ΔT_startup) ? (Q_ev + Q_in) / λ : 0.0 # startup
 
     # residual
-    Q_1 = 0.0
-    Q_2 = 0.0
-    T_1 = 0.0
-    T_2 = 0.0
-    res = zeros(N)
+    
     for i in 1:N
         T = var.wick[i]
         T_old = var_old.wick[i]
@@ -35,12 +39,12 @@ function fluid_wick(var, var_old, T_wall, geo, condition) # 返り値 m_evap
         
         T_1 = (i == 1) ? var.cc.T : var.wick[i-1]
         T_2 = (i == N) ? var.grv.T : var.wick[i+1] 
-        Q_1 = (i == 1) ? 0.0 : calc_Q_wick(k_eff, l_w, D_o, D_i, T_1, T) # 内側との熱伝導による熱授受（最内層では0）
-        Q_2 = (i == N) ? Q_ev : calc_Q_wick(k_eff, l_w, D_o, D_i, T_2, T) # 外側との熱伝導による熱授受（最外層ではQ_ev）
-        α_1 = (i == 1) ? var.cc.α : 0.0
+        Q_1 = (i == 1) ? 0.0 : G_wick(i-1) * (var.wick[i-1] - T) # 内側との熱伝導による熱授受（最内層では0）
+        Q_2 = (i == N) ? Q_ev : G_wick(i) * (var.wick[i+1] - T) # 外側との熱伝導による熱授受（最外層ではQ_ev）
+        α_1 = 0.0
         α_2 = (i == N) ? var.grv.α : 0.0
         h_1 = calc_h_2p(T_1, α_1, FLUID)
-        h_2 = calc_h_2p(T_2, α_2, FLUID)
+        h_2 = (i == N) ? calc_h_2p(T, 1.0, FLUID) : calc_h_2p(T, 0.0, FLUID)
         if i == N
             V = (geo.wick.width * geo.wick.height + π * (D_o^2 - D_i^2) * 0.25) * geo.wick.L
         else
@@ -73,20 +77,23 @@ function fluid_grv(m_evap, var, var_old, T_wall, geo, condition)
 
     T_1 = var.wick[end]
     P_1 = calc_Psat(T_1, FLUID)
-    α_1 = 0.0
+    α_1 = 1.0
     m_1 = m_evap
+    h_j1 = calc_h_2p(T_1, α_1, FLUID)
 
     T_2 = var.vl.T[1]
     α_2 = α_cropper(var.vl.α[1])
     m_2 = var.vl.m[1]
+    h_j2 = calc_h_2p(T, α, FLUID)
 
     # Q_grv
     Q_grv = calc_Q_grv(m_evap, var, T_wall, geo, condition)
 
     # residuals
-    res_mass  = f_mass(V, T, T_old, α, α_old, m, m_2, FLUID, dt)
+    res_mass  = f_mass(V, T, T_old, α, α_old, m_evap, m_2, FLUID, dt)
     res_mom   = f_mom(dl, A_cross, D, m, m_old, T_1, P_1, α_1, P, FLUID, dt)
-    res_ene   = f_ene(V, A_cross, T, T_old, α, α_old, m, m_old, T_1, α_1, m_1, T_2, α_2, m_2, Q_grv, FLUID, dt)
+    # res_ene   = f_ene(V, A_cross, T, T_old, α, α_old, m, m_old, T_1, α_1, m_1, h_j1, T_2, α_2, m_2, h_j2, -Q_grv, FLUID, dt)
+    res_ene   = f_ene(V, A_cross, T, T_old, α, α_old, m, m_old, T_1, α_1, m_evap, h_j1, T_2, α_2, m_2, h_j2, -Q_grv, FLUID, dt)
     res_state = f_state(T, P, α, FLUID)
     return res_mass, res_mom, res_ene, res_state
 end
@@ -115,12 +122,15 @@ function fluid_vl!(res_mass, res_mom, res_ene, res_state, var, var_old, T_wall, 
         T_1 = (i == 1) ? var.grv.T : var.vl.T[i-1]
         P_1 = (i == 1) ? var.grv.P : var.vl.P[i-1]
         α_1 = (i == 1) ? var.grv.α : var.vl.α[i-1]
-        m_1 = (i == 1) ? var.grv.m : var.vl.m[i-1]
+        # m_1 = (i == 1) ? var.grv.m : var.vl.m[i-1]
+        m_1 = var.vl.m[i]
+        h_j1 = calc_h_2p(T_1, α_1, FLUID)
 
         T_2 = (i == N) ? var.cond.T[1] : var.vl.T[i+1]
         # P_2 = (i == N) ? var.cond.P[1] : var.vl.P[i+1]
         α_2 = (i == N) ? var.cond.α[1] : var.vl.α[i+1]
         m_2 = (i == N) ? var.cond.m[1] : var.vl.m[i+1]
+        h_j2 = calc_h_2p(T, α, FLUID)
 
         # Q_wall
         h = calc_h_wall_f_1p(T, P, m, D_i, A_cross, FLUID)
@@ -129,7 +139,7 @@ function fluid_vl!(res_mass, res_mom, res_ene, res_state, var, var_old, T_wall, 
         # residuals
         res_mass[i]  = f_mass(V, T, T_old, α, α_old, m, m_2, FLUID, dt)
         res_mom[i]   = f_mom(dl, A_cross, D_i, m, m_old, T_1, P_1, α_1, P, FLUID, dt)
-        res_ene[i]   = f_ene(V, A_cross, T, T_old, α, α_old, m, m_old, T_1, α_1, m_1, T_2, α_2, m_2, Q_wall, FLUID, dt)
+        res_ene[i]   = f_ene(V, A_cross, T, T_old, α, α_old, m, m_old, T_1, α_1, m_1, h_j1, T_2, α_2, m_2, h_j2, Q_wall, FLUID, dt)
         res_state[i] = f_state(T, P, α, FLUID) 
     end
 
@@ -159,12 +169,15 @@ function fluid_cond!(res_mass, res_mom, res_ene, res_state, var, var_old, T_wall
         T_1 = (i == 1) ? var.vl.T[end] : var.cond.T[i-1]
         P_1 = (i == 1) ? var.vl.P[end] : var.cond.P[i-1]
         α_1 = (i == 1) ? var.vl.α[end] : var.cond.α[i-1]
-        m_1 = (i == 1) ? var.vl.m[end] : var.cond.m[i-1]
+        # m_1 = (i == 1) ? var.vl.m[end] : var.cond.m[i-1]
+        m_1 = var.cond.m[i]
+        h_j1 = calc_h_2p(T_1, α_1, FLUID)
 
         T_2 = (i == N) ? var.ll.T[1] : var.cond.T[i+1]
         # P_2 = (i == N) ? var.ll.P[1] : var.cond.P[i+1]
         α_2 = (i == N) ? var.ll.α[1] : var.cond.α[i+1]
         m_2 = (i == N) ? var.ll.m[1] : var.cond.m[i+1]
+        h_j2 = calc_h_2p(T, α, FLUID)
 
         # Q_wall
         h_sp = calc_h_wall_f_1p(T, P, m, D_i, A_cross, FLUID)
@@ -176,7 +189,7 @@ function fluid_cond!(res_mass, res_mom, res_ene, res_state, var, var_old, T_wall
         # residuals
         res_mass[i]  = f_mass(V, T, T_old, α, α_old, m, m_2, FLUID, dt)
         res_mom[i]   = f_mom(dl, A_cross, D_i, m, m_old, T_1, P_1, α_1, P, FLUID, dt)
-        res_ene[i]   = f_ene(V, A_cross, T, T_old, α, α_old, m, m_old, T_1, α_1, m_1, T_2, α_2, m_2, Q_wall, FLUID, dt)
+        res_ene[i]   = f_ene(V, A_cross, T, T_old, α, α_old, m, m_old, T_1, α_1, m_1, h_j1, T_2, α_2, m_2, h_j2, Q_wall, FLUID, dt)
         res_state[i] = f_state(T, P, α, FLUID) 
     end
 
@@ -206,12 +219,15 @@ function fluid_ll!(res_mass, res_mom, res_ene, res_state, var, var_old, T_wall, 
         T_1 = (i == 1) ? var.cond.T[end] : var.ll.T[i-1]
         P_1 = (i == 1) ? var.cond.P[end] : var.ll.P[i-1]
         α_1 = (i == 1) ? var.cond.α[end] : var.ll.α[i-1]
-        m_1 = (i == 1) ? var.cond.m[end] : var.ll.m[i-1]
+        # m_1 = (i == 1) ? var.cond.m[end] : var.ll.m[i-1]
+        m_1 = var.ll.m[i]
+        h_j1 = calc_h_2p(T_1, α_1, FLUID)
 
         T_2 = (i == N) ? var.cc.T : var.ll.T[i+1]
         # P_2 = (i == N) ? var.cc.P : var.ll.P[i+1]
         α_2 = (i == N) ? var.cc.α : var.ll.α[i+1]
         m_2 = (i == N) ? var.cc.m : var.ll.m[i+1]
+        h_j2 = calc_h_2p(T, α, FLUID)
 
         # Q_wall
         if α == 1.0 || α == 0.0
@@ -224,7 +240,7 @@ function fluid_ll!(res_mass, res_mom, res_ene, res_state, var, var_old, T_wall, 
         # residuals
         res_mass[i]  = f_mass(V, T, T_old, α, α_old, m, m_2, FLUID, dt)
         res_mom[i]   = f_mom(dl, A_cross, D_i, m, m_old, T_1, P_1, α_1, P, FLUID, dt)
-        res_ene[i]   = f_ene(V, A_cross, T, T_old, α, α_old, m, m_old, T_1, α_1, m_1, T_2, α_2, m_2, Q_wall, FLUID, dt)
+        res_ene[i]   = f_ene(V, A_cross, T, T_old, α, α_old, m, m_old, T_1, α_1, m_1, h_j1, T_2, α_2, m_2, h_j2, Q_wall, FLUID, dt)
         res_state[i] = f_state(T, P, α, FLUID) 
     end
 
@@ -252,21 +268,24 @@ function fluid_cc(m_evap, var, var_old, T_wall, geo, condition)
     T_1 = var.ll.T[end]
     P_1 = var.ll.P[end]
     α_1 = var.ll.α[end]
-    m_1 = var.ll.m[end]
+    # m_1 = var.ll.m[end]
+    m_1 = m
+    h_j1 = calc_h_2p(T_1, α_1, FLUID)
 
     T_2 = var.wick[1]
     P_2 = calc_Psat(T_2, FLUID)
     α_2 = 0.0
     m_2 = m_evap
+    h_j2 = calc_h_2p(T, 0.0, FLUID)
 
     # Q_wall
-    k = calc_k_2p(T, α, FLUID)
-    Q_wall = calc_Q_fluid(k, D_o, D_i, T, T_w)
+    k = k_sus304(T_w)
+    Q_wall = calc_Q_fluid(dl, k, D_o, D_i, T, T_w)
 
     # residuals
     res_mass  = f_mass(V, T, T_old, α, α_old, m_1, m_2, FLUID, dt)
     res_mom   = f_mom(dl, A_cross, D_i, m, m_old, T_1, P_1, α_1, P_2, FLUID, dt)
-    res_ene   = f_ene(V, A_cross, T, T_old, α, α_old, m, m_old, T_1, α_1, m_1, T_2, α_2, m_2, Q_wall, FLUID, dt)
+    res_ene   = f_ene(V, A_cross, T, T_old, α, α_old, m, m_old, T_1, α_1, m_1, h_j1, T_2, α_2, m_2, h_j2, Q_wall, FLUID, dt)
     res_state = f_state(T, P, α, FLUID)
     return res_mass, res_mom, res_ene, res_state
 end

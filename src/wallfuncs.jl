@@ -1,20 +1,20 @@
 function wall_ec(m_evap_old, var_old, T_wall_old, geo, condition)
     Q_apply = condition.Q_apply
-
+    @show Q_apply
     # Q_ev
     Q_ev = calc_Q_ev(var_old, T_wall_old, geo, condition)
-
+    @show Q_ev
     # Q_grv
     Q_grv = calc_Q_grv(m_evap_old, var_old, T_wall_old, geo, condition)
-
+    @show Q_grv
     # Q_ec_cc
     Q_ec_cc = calc_Q_ec_cc(T_wall_old, geo)
-
+    @show Q_ec_cc
     # Q_ec_vl
     Q_ec_vl = calc_Q_ec_vl(var_old, T_wall_old, geo, condition)
-
+    @show Q_ec_vl
     # specific heat
-    C = ((geo.grv.D_o^2 - geo.grv.D_i^2) * 0.25 * geo.grv.L) * ρ_sus304(T_wall_old.evap) * c_sus304(T_wall_old.evap) 
+    C = (π * (geo.grv.D_o^2 - geo.grv.D_i^2) * 0.25 * geo.grv.L) * ρ_sus304(T_wall_old.evap) * c_sus304(T_wall_old.evap) 
 
     dTdt = (Q_apply - Q_ev - Q_grv - Q_ec_cc - Q_ec_vl) / C
     return dTdt
@@ -41,7 +41,7 @@ function wall_common(var_old, T_wall_old, geo, condition, comp1, comp, comp2, T_
 
     dTdt = zeros(geo_part.N)
 
-    V = (geo_part.D_o^2 - geo_part.D_i^2) * 0.25 * geo_part.dl
+    V = π * (geo_part.D_o^2 - geo_part.D_i^2) * 0.25 * geo_part.dl
 
     for i in 1:geo_part.N
         T = T_wall_old_part[i]
@@ -70,7 +70,7 @@ function wall_common(var_old, T_wall_old, geo, condition, comp1, comp, comp2, T_
         T_2 = (i == geo_part.N) ? T_z : T_wall_old_part[i+1]
 
         if comp == :cond
-            Q_amb = calc_Q_wall_amb(k, geo_part.D_o, geo_part.D_i, T_amb, T)
+            Q_amb = calc_Q_wall_amb(geo_part.dl, k, geo_part.D_o, geo_part.D_i, T_amb, T)
         else
             Q_amb = 0.0
         end
@@ -107,10 +107,10 @@ function wall_cc(var_old, T_wall_old, geo, condition)
     Q_amb = 0.0
 
     # Q_fluid
-    Q_fluid = calc_Q_fluid(k, geo.cc.D_o, geo.cc.D_i, var_old.cc.T, T_cc)
+    Q_fluid = calc_Q_fluid(geo.cc.L, k, geo.cc.D_o, geo.cc.D_i, var_old.cc.T, T_cc)
 
     # specific heat
-    C = ((geo.cc.D_o^2 - geo.cc.D_i^2) * 0.25 * geo.cc.L) * ρ_sus304(T_wall_old.cc) * c_sus304(T_wall_old.cc) 
+    C = (π * (geo.cc.D_o^2 - geo.cc.D_i^2) * 0.25 * geo.cc.L) * ρ_sus304(T_wall_old.cc) * c_sus304(T_wall_old.cc) 
 
     dTdt = (Q_ec_cc + Q_cc_ll + Q_amb + Q_fluid) / C
     return dTdt

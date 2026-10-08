@@ -381,7 +381,7 @@ end
 
 function calc_ΔP_1p(T, P, m, D_i, A_cross, FLUID)
     τ = calc_τ_wall(T, P, m, D_i, A_cross, FLUID)
-    return π * D_i * τ / A_cross
+    return π * D_i * τ
 end
 
 function calc_τ_wall_sat(T, m_p, D_i, A_cross, phase::Symbol, FLUID)
@@ -430,8 +430,8 @@ function calc_ΔP_2p(T, α, m, D_i, A_cross, FLUID)
         @show x
     end
 
-    ΔP_l = π * D_i * calc_τ_wall_sat(T, m_l, D_i, A_cross, :liquid, FLUID) / A_cross
-    ΔP_v = π * D_i * calc_τ_wall_sat(T, m_v, D_i, A_cross, :vapor, FLUID) / A_cross
+    ΔP_l = π * D_i * calc_τ_wall_sat(T, m_l, D_i, A_cross, :liquid, FLUID)
+    ΔP_v = π * D_i * calc_τ_wall_sat(T, m_v, D_i, A_cross, :vapor, FLUID)
     return ΔP_l + ΔP_v + C * sqrt(ΔP_l * ΔP_v)
 end
 
@@ -505,7 +505,7 @@ end
 
 function calc_Q_ec_cc(T_wall_old, geo)
     T_ec = T_wall_old.evap
-    T_cc = T_wall_old.evap
+    T_cc = T_wall_old.cc
 
     D_ec_o = geo.grv.D_o
     D_ec_i = geo.grv.D_i
@@ -550,8 +550,8 @@ function calc_Q_wall_cond(G_adj, G, T_adj, T)
     return G_ave * (T_adj - T)
 end
 
-function calc_Q_wall_amb(k, D_o, D_i, T_amb, T)
-    G = (2 * π * k) / log(D_o / D_i)
+function calc_Q_wall_amb(dl, k, D_o, D_i, T_amb, T)
+    G = (2 * π * k * dl) / log(D_o / D_i)
     return G * (T_amb - T)
 end
 
@@ -559,8 +559,8 @@ function calc_Q_conv(h, S, T_f, T_wall)
     return h * S * (T_f - T_wall)
 end
 
-function calc_Q_fluid(k, D_o, D_i, T_f, T) # CCでは管内壁表面が内部流体と同じ温度になっていると仮定して計算する
-    G = (2 * π * k) / log(D_o / D_i)
+function calc_Q_fluid(dl, k, D_o, D_i, T_f, T) # CCでは管内壁表面が内部流体と同じ温度になっていると仮定して計算する
+    G = (2 * π * k * dl) / log(D_o / D_i)
     return G * (T_f - T)
 end
 
@@ -582,7 +582,7 @@ function calc_Q_cc_ll(T_wall_old, geo)
 
     G_ave = 1/(1/G_cc + 1/G_ll)
 
-    return G_ave * (T_cc - T_ll)
+    return G_ave * (T_ll - T_cc)
 end
 
 function calc_Q_wick(k_eff, l_w, D_o, D_i, T_adj, T)
