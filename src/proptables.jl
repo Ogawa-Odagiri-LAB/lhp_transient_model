@@ -138,7 +138,13 @@ struct RhoEInterp{I,R}
     itp::I
     ρ_ref::R
 end
-(f::RhoEInterp)(ρ, e) = f.itp(e, ρ - f.ρ_ref(e))
+function (f::RhoEInterp)(ρ, e)
+    # NaN/Inf を Interpolations に渡すと、添字計算が不正になり @inbounds の範囲外読み出し
+    # (EXCEPTION_ACCESS_VIOLATION = Julia ごと落ちる) になる。必ずここで止める。
+    (isfinite(ρ) && isfinite(e)) ||
+        throw(DomainError((ρ, e), "RhoEInterp: 非有限の (ρ, e) が入力された"))
+    return f.itp(e, ρ - f.ρ_ref(e))
+end
 
 # キャッシュ (.jls) の中身や、FluidTables のフィールド構成を変えたら、この値を上げる。
 # 古いキャッシュは、ファイル名に含めて自動的に無効化する (構築し直される)。

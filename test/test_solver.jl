@@ -51,7 +51,7 @@ geo = LHPGeometry(wick,
                   CondGeometry(N=5, L=1.0, D_i=0.00435, D_o=0.00635),
                   TLGeometry(N=5, L=1.0, D_i=0.00218, D_o=0.00318),
                   CCGeometry(N=1, L=0.07, D_i=0.035, D_o=0.037))
-condition = LHPTransientCondition(Q_apply=20.0, t_init=0.0, t_end=T_END, saveat=SAVEAT, fluid=fluid)
+condition = LHPTransientCondition(Q_apply=5.0, t_init=0.0, t_end=T_END, saveat=SAVEAT, fluid=fluid)
 
 println("設定: T_END=", T_END, " s, RELTOL=", RELTOL, ", ATOL_FRAC=", ATOL_FRAC,
         ", ATOL_FRAC_U=", ATOL_FRAC_U, ", MAX_ORDER=", MAX_ORDER)

@@ -11,6 +11,7 @@ using Sundials
 using DiffEqBase: DAEProblem, DAEFunction, solve
 
 export LHPGeometry, WickGeometry, GrvGeometry, TLGeometry, CondGeometry, CCGeometry
+export FlatLHPGeometry, FlatWickGeometry, SecondaryWickGeometry, FlatGrvGeometry, FlatCCGeometry
 export LHPTransientCondition
 export init_fluid_lookups, FluidTables
 export solve_transient_lhp!, components_at, applied_heat
@@ -29,13 +30,18 @@ include(joinpath(@__DIR__, "propaccess.jl"))           # Level2: 物性へのア
 include(joinpath(@__DIR__, "correlations.jl"))         # Level1: 相関式
 include(joinpath(@__DIR__, "heattransfer.jl"))         # Level3/4: 熱伝達・摩擦
 include(joinpath(@__DIR__, "geometry_cc.jl"))          # CC の気液分離幾何
+include(joinpath(@__DIR__, "geometry_flatcc.jl"))      # 平板型CC (半円筒) の気液分離幾何
 include(joinpath(@__DIR__, "residuals_transport.jl"))  # 輸送管の流体
 include(joinpath(@__DIR__, "residuals_wall.jl"))       # 輸送管の壁
 include(joinpath(@__DIR__, "residuals_wick.jl"))       # ウィック
 include(joinpath(@__DIR__, "residuals_cc.jl"))         # CC
 include(joinpath(@__DIR__, "residuals_evapcase.jl"))   # 蒸発器ケース
 include(joinpath(@__DIR__, "residuals_grv.jl"))        # グルーブ
-include(joinpath(@__DIR__, "residuals_main.jl"))       # 全体の残差
+include(joinpath(@__DIR__, "residuals_main.jl"))       # 全体の残差 (円筒型)
+include(joinpath(@__DIR__, "residuals_flatwick.jl"))   # 平板型: primary / secondary wick
+include(joinpath(@__DIR__, "residuals_flatcc.jl"))     # 平板型: CC
+include(joinpath(@__DIR__, "residuals_flatevapcase.jl")) # 平板型: 蒸発器ケース
+include(joinpath(@__DIR__, "residuals_flatmain.jl"))   # 平板型: 全体の残差
 include(joinpath(@__DIR__, "initialcondition.jl"))     # 整合初期条件
 include(joinpath(@__DIR__, "sparsity.jl"))             # ヤコビアンの疎構造
 include(joinpath(@__DIR__, "solverfuncs.jl"))          # IDA による時間積分

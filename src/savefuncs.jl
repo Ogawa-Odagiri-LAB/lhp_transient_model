@@ -30,7 +30,7 @@ using CSV, DataFrames
   T_out [K] (蒸発界面の温度 = T_sat(P_grv)), mdot [kg/s] (CC からウィックへの流量 = 蒸発量),
   Q_evap [W] (蒸発による熱 = mdot × h_fg(T_out)。印加熱 Q_apply と比べると、熱が蒸発に使われているか分かる)
 """
-function results_summary(sol, p::LHPParams, tables::FluidTables)
+function results_summary(sol, p::AbstractLHPParams, tables::FluidTables)
     df = DataFrame(t = Float64[], Q_apply = Float64[], T_ec = Float64[], P_cc = Float64[],
                    T_cc = Float64[], P_grv = Float64[], T_out = Float64[], mdot = Float64[],
                    Q_evap = Float64[])
@@ -57,7 +57,7 @@ end
   rho [kg/m³], u [m/s] (セルの下流側の面の速度), Em [J/kg], P [Pa], T [K], x [-] (乾き度),
   T_wall [K] (壁温度。グルーブは壁を持たないので NaN)
 """
-function results_profiles(sol, p::LHPParams)
+function results_profiles(sol, p::AbstractLHPParams)
     df = DataFrame(t = Float64[], comp = String[], cell = Int[], rho = Float64[], u = Float64[],
                    Em = Float64[], P = Float64[], T = Float64[], x = Float64[], T_wall = Float64[])
     for k in eachindex(sol.t)
@@ -78,12 +78,14 @@ end
 """
     results_wick(sol, p) -> DataFrame
 
-ウィックの分布。1 行 = (保存時刻, セル)。cell は内側 (CC側) = 1。T [K], E [J] (式49)。
+ウィックの分布。1 行 = (保存時刻, セル)。cell は内側 (CC側) = 1。平板型は、secondary wick を cell = 0 で含む。T [K], E [J] (式49)。
 """
-function results_wick(sol, p::LHPParams)
+function results_wick(sol, p::AbstractLHPParams)
     df = DataFrame(t = Float64[], cell = Int[], T = Float64[], E = Float64[])
     for k in eachindex(sol.t)
         c = components_at(sol, p, k)
+        # 平板型: secondary wick は cell = 0 の行として保存する (primary wick の内側のノード0)
+        :swick in keys(c) && push!(df, (t = sol.t[k], cell = 0, T = c.swick.T[1], E = c.swick.E[1]))
         for i in eachindex(c.wick.T)
             push!(df, (t = sol.t[k], cell = i, T = c.wick.T[i], E = c.wick.E[i]))
         end
@@ -97,7 +99,7 @@ end
 各成分のセル数 N と長さ L [m] (comp = "grv", "vl", "cond", "ll", "cc")。
 プロットで、ループに沿った位置座標を作るのに使う (plot.jl の load_lengths が読む)。
 """
-function results_geometry(p::LHPParams)
+function results_geometry(p::AbstractLHPParams)
     g = p.geo
     return DataFrame(comp = ["grv", "vl", "cond", "ll", "cc"],
                      N = [g.grv.N, g.vl.N, g.cond.N, g.ll.N, g.cc.N],
@@ -109,7 +111,7 @@ end
 
 summary.csv, profiles.csv, wick.csv, geometry.csv を dir に書き出す (dir が無ければ作る)。
 """
-function save_results(sol, p::LHPParams, tables::FluidTables, dir::AbstractString)
+function save_results(sol, p::AbstractLHPParams, tables::FluidTables, dir::AbstractString)
     mkpath(dir)
     CSV.write(joinpath(dir, "summary.csv"), results_summary(sol, p, tables))
     CSV.write(joinpath(dir, "profiles.csv"), results_profiles(sol, p))

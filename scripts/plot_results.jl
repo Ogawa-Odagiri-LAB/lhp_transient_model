@@ -18,10 +18,12 @@
 using Plots, DataFrames, CSV, CoolProp
 include(joinpath(@__DIR__, "..", "src", "plot.jl"))
 
+result_name = "transient_flat_ammonia"
+
 # ---------------------------- 設定 ----------------------------
 # (REPL で、値を書き換えて何度も include できるよう、const にはしていない)
 # 結果のフォルダ (transient.jl の save_results の出力先)
-RES_DIR = joinpath(@__DIR__, "..", "res", "transient_ammonia")
+RES_DIR = joinpath(@__DIR__, "..", "res", result_name)
 # 分布を見たい時刻 [s] (保存されている時刻のうち、最も近いものを使う)
 TIMES = [10.0, 50.0, 100.0, 200.0]
 # 作動流体 (蒸発による熱 mdot × h_fg を計算するのに使う)

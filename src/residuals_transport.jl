@@ -62,7 +62,7 @@ TLGeometry / CondGeometry / CCGeometry から、残差関数が使う幾何量�
 取り出す。D は熱伝達・摩擦の代表直径 (内径)、S は1セルあたりの内壁面積、
 V は1セルの流体体積、A は流路断面積。
 """
-pipe_params(geo::Union{TLGeometry,CondGeometry,CCGeometry}) = (
+pipe_params(geo::Union{TLGeometry,CondGeometry,CCGeometry,FlatCCGeometry}) = (
     N = geo.N, dl = geo.dl, D = geo.D_i, A = geo.A_cross,
     S = geo.S_inner, V = geo.V, θ = geo.θ, elev0 = geo.elev0,
 )
