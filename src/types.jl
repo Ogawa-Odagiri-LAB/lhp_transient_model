@@ -151,6 +151,140 @@ end
     cc::CCGeometry
 end
 
+# ---- 平板型蒸発器 (金属3Dプリンター製) ----
+@with_kw struct FlatWickGeometry
+    N::Int = 5                     # 半径方向の分割数
+
+    n_grv::Int = 19                # グルーブ本数
+    W::Float64 = 0.030             # primary wick直径方向長さ [m]
+    L::Float64 = 0.030             # primary wick長さ [m]
+    H::Float64 = 0.0032            # ウィックの高さ [m]（グルーブ部を除く）
+    dH::Float64 = H / N            # ウィック高さ方向の分割幅 [m]
+
+    width::Float64 = 0.00075         # グルーブ溝幅 [m]
+    height::Float64 = 0.0008        # グルーブ溝深さ [m]
+
+    # --- 式46 (ウィックエネルギー) で必要な材料物性 ---
+    # デフォルト値は与えていない: 誤った物理定数が気づかれないまま
+    # 使われることを避けるため、呼び出し側で必ず指定する。
+    φ::Float64                     # 空隙率 (0〜1)
+    ρ_wick::Float64                # 固体マトリクス密度 [kg/m3]
+    Cp_wick::Float64               # 固体マトリクス比熱 [J/(kg・K)]
+end
+
+@with_kw struct SecondaryWickGeometry
+    N::Int = 1
+
+    φ_s::Float64                     # 空隙率 (0〜1)。primary wick の φ とは別
+    ρ_swick::Float64                # 固体マトリクス密度 [kg/m3]
+    Cp_swick::Float64               # 固体マトリクス比熱 [J/(kg・K)]
+end
+
+@with_kw struct FlatGrvGeometry
+    N::Int = 1
+    n_grv::Int = 19
+    W::Float64 = 0.030             # primary wick直径方向長さ [m]
+    L::Float64 = 0.030             # primary wick長さ [m]
+    H::Float64 = 0.004             # primary wick高さ [m]
+    dl::Float64 = L / N
+    W_case::Float64 = 0.032                       # 蒸発器ケース受熱面の幅 [m]
+    L_case::Float64 = 0.032                       # 蒸発器ケース受熱面の長さ [m]
+    H_case::Float64 = 0.0055                      # 蒸発器ケース（と考えているところまで）の高さ [m]
+    T_bottom::Float64 = 0.0015               # 蒸発器ケース下面の厚み [m]
+    T_side::Float64 = 0.001                  # 蒸発器ケース側面の厚み [m]
+    width::Float64 = 0.00075
+    height::Float64 = 0.0008
+    A_ec_wick::Float64 = width * L * n_grv   # 蒸発器ケース-ウィック界面積 [m2]
+    A_ec_grv::Float64 = A_ec_wick            # 蒸発器ケース-グルーブ界面積 [m2]
+    A_grv_cross::Float64 = width * height    # グルーブ1本あたりの断面積 [m2]
+    θ::Float64 = 0.0                         # 傾斜角 [度] (水平=0)。運動量式の重力項 g sinθ に使う
+    elev0::Float64 = 0.0                     # 入口 (最上流の面) の標高 [m]。Emの位置エネルギー項に使う
+end
+
+# 平板型: 半円筒のCC (曲面が上、平面が下で secondary wick を介して primary wick に接する)
+@with_kw struct FlatCCGeometry
+    N::Int
+    L::Float64 = 0.025                                              # 軸方向長さ [m] (geometry_cc.jl の Lc)
+    dl::Float64 = L / N
+    D_i::Float64 = 0.027                                            # 内径（流体部直径）
+    D_swick::Float64 = 0.030                                        # secondary wick外径 [m]
+    D_o::Float64 = 0.032                                            # 外径 [m]
+    R::Float64 = D_i / 2                                            # 内半径 [m] (水平円筒の気液分離計算用)
+    T_swick::Float64 = 0.0025                                       # secodnary wick 厚み
+    A_cross::Float64 = 0.5 * (π / 4) * D_i^2                        # 流体部断面積 [m^2] (半円)
+    S_inner::Float64 = π * D_i * 0.5 * dl + (π / 4) * D_i^2         # CC流体部の曲面+両端面の面積 [m^2] (平面側は含まない)
+    S_swick::Float64 = π * D_swick * 0.5 * dl + (π / 4) * D_swick^2 # secondary wick表面積（蒸発器ケースとsecondary wickの接触面積）[m^2]
+    A_pr_se::Float64 = D_swick^2                                    # primary wickとsecondary wickの接触面積 [m^2]
+    V::Float64 = A_cross * dl
+    θ::Float64 = 0.0                         # 傾斜角 [度] (水平=0)。運動量式の重力項 g sinθ に使う
+    elev0::Float64 = 0.0                     # 入口 (最上流の面) の標高 [m]。Emの位置エネルギー項に使う
+end
+
+# 平板型のLHP全体のジオメトリ。secondary wick (swick) を持つ
+@with_kw struct FlatLHPGeometry
+    wick::FlatWickGeometry
+    swick::SecondaryWickGeometry
+    grv::FlatGrvGeometry
+    vl::TLGeometry
+    cond::CondGeometry
+    ll::TLGeometry
+    cc::FlatCCGeometry
+end
+
+# 円筒型・平板型の共通の上位型 (initialcondition.jl などの関数を共用するため)
+abstract type AbstractLHPParams end
+const AnyLHPGeometry = Union{LHPGeometry,FlatLHPGeometry}
+
+"""
+    initialize_state(geo::FlatLHPGeometry)
+
+円筒型の状態に、secondary wick (u.swick.E, u.swick.T: 各1要素) を加えたもの。
+"""
+function initialize_state(geo::FlatLHPGeometry)
+    return ComponentArray(
+        vl   = _zeros_transport(geo.vl.N),
+        cond = _zeros_transport(geo.cond.N),
+        ll   = _zeros_transport(geo.ll.N),
+        grv  = _zeros_transport(geo.grv.N),
+        cc   = _zeros_transport(geo.cc.N),
+        wick  = (E = zeros(geo.wick.N), T = zeros(geo.wick.N)),
+        swick = (E = zeros(1), T = zeros(1)),
+        T_wall = (
+            evap = zeros(1),
+            vl   = zeros(geo.vl.N),
+            cond = zeros(geo.cond.N),
+            ll   = zeros(geo.ll.N),
+            cc   = zeros(geo.cc.N),
+        ),
+    )
+end
+
+"""
+    initialize_differential_vars(geo::FlatLHPGeometry)
+
+円筒型と同じ分類。secondary wick は primary wick と同じく E が微分変数、T が代数変数。
+"""
+function initialize_differential_vars(geo::FlatLHPGeometry)
+    transport_mask(N) = (ρm=trues(N), u=trues(N), Em=trues(N),
+                          P=falses(N), T=falses(N), x=falses(N))
+    return ComponentArray(
+        vl   = transport_mask(geo.vl.N),
+        cond = transport_mask(geo.cond.N),
+        ll   = transport_mask(geo.ll.N),
+        grv  = transport_mask(geo.grv.N),
+        cc   = merge(transport_mask(geo.cc.N), (u = falses(geo.cc.N),)),
+        wick  = (E = trues(geo.wick.N), T = falses(geo.wick.N)),
+        swick = (E = trues(1), T = falses(1)),
+        T_wall = (
+            evap = trues(1),
+            vl   = trues(geo.vl.N),
+            cond = trues(geo.cond.N),
+            ll   = trues(geo.ll.N),
+            cc   = trues(geo.cc.N),
+        ),
+    )
+end
+
 # -----------------------------------------------------------------------------
 # 2. 運転条件構造体
 # -----------------------------------------------------------------------------
@@ -160,7 +294,7 @@ end
     Q_apply::Float64                   # ステップ後の印加熱量 [W] (最終値)
     t_init::Float64                    # 計算開始時刻 [s]
     t_end::Float64                     # 計算終了時刻 [s]
-    saveat::Float64 = 1.0              # 結果を保存する時間間隔 [s]
+    saveat::Union{Float64,Vector{Float64}} = 1.0   # 結果を保存する時間間隔 [s]、または保存する時刻のベクトル
                                         # (IDAの内部刻み幅とは独立。出力間引き用)
 
     # --- 印加熱量のステップアップ (滑らかなステップ) ---
@@ -356,6 +490,10 @@ function scale_state(u, condition::LHPTransientCondition)
     end
     scaled.wick.E ./= condition.Em_scale   # ウィックのEも同じエネルギースケールを流用
     scaled.wick.T ./= condition.T_scale
+    if :swick in keys(scaled)              # 平板型: secondary wick
+        scaled.swick.E ./= condition.Em_scale
+        scaled.swick.T ./= condition.T_scale
+    end
     for comp in condition.wall_comp
         c = getproperty(scaled.T_wall, comp)
         c ./= condition.T_scale
@@ -381,6 +519,10 @@ function restore_state(u_scaled, condition::LHPTransientCondition)
     end
     restored.wick.E .*= condition.Em_scale
     restored.wick.T .*= condition.T_scale
+    if :swick in keys(restored)
+        restored.swick.E .*= condition.Em_scale
+        restored.swick.T .*= condition.T_scale
+    end
     for comp in condition.wall_comp
         c = getproperty(restored.T_wall, comp)
         c .*= condition.T_scale

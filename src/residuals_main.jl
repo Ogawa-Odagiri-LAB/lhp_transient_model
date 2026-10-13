@@ -49,7 +49,7 @@ using ComponentArrays: ComponentArray, getaxes
 残差関数が毎回使う、事前計算した量。幾何パラメータ (pipe_params など) は、
 最初に1回だけ作って、ここに入れておく。
 """
-struct LHPParams{A,T}
+struct LHPParams{A,T} <: AbstractLHPParams
     geo::LHPGeometry
     cond::LHPTransientCondition
     tables::T

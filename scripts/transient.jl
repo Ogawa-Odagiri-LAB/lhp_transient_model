@@ -4,6 +4,11 @@ using Pkg; Pkg.activate(".") # プロジェクト環境のアクティベート
 push!(LOAD_PATH, joinpath(@__DIR__, "../src"))
 using LHPTransientModel
 
+# --- 結果の保存先 ---
+# 名前だけ指定すると ../res/<名前>/ に保存される。絶対パスを指定すると、そこに保存される。
+result_name = "transient_ammonia"
+result_dir = isabspath(result_name) ? result_name : joinpath(@__DIR__, "..", "res", result_name)
+
 # --- 運転条件 ---
 # Q_apply_init から Q_apply へ、t_step から τ_step かけて、滑らかにステップアップする
 # (Q_apply_init = Q_apply ならステップなし)。時間刻みは、IDA が許容誤差で制御する。
@@ -12,11 +17,11 @@ condition = LHPTransientCondition(
     T_cond = 15.0 + 273.15,        # 凝縮器プレートの温度 [K]
     T_amb  = 25.0 + 273.15,        # 周囲温度 [K]
     T_init = 25.0 + 273.15,        # 初期の基準温度 [K]
-    Q_apply_init = 20.0,           # ステップ前の印加熱量 [W]
-    Q_apply = 40.0,                # ステップ後の印加熱量 [W]
-    t_step = 200.0, τ_step = 1.0,   # t = 50 s から 1 s かけて 20 W → 40 W
+    Q_apply_init = 5.0,           # ステップ前の印加熱量 [W]
+    Q_apply = 10.0,                # ステップ後の印加熱量 [W]
+    t_step = 50.0, τ_step = 1.0,   # t = 50 s から 1 s かけて 20 W → 40 W
     ΔT_startup = 0.0,              # 起動判定 (0 なら判定なし)
-    t_init = 0.0, t_end = 400.0,
+    t_init = 0.0, t_end = 200.0,
     saveat = 1.0,                  # 保存間隔 [s]。刻みへの影響はない (IDA の内部の刻みとは独立)
 )
 
@@ -45,7 +50,7 @@ println("計算時間: ", round(t_wall, digits = 1), " s (シミュレーショ�
 energy_balance(sol, p)
 
 # --- 結果の保存 (CSV) ---
-save_results(sol, p, tables, joinpath(@__DIR__, "..", "res", "transient_ammonia"))
+save_results(sol, p, tables, result_dir)
 
 # --- プロット ---
 # 保存した CSV を、plot_results.jl (スクリプト) で、計算をやり直さずに、いつでも眺められる。

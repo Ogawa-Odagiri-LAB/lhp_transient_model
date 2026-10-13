@@ -432,8 +432,8 @@ function plot_distribution(prof::DataFrame, wick::DataFrame, lengths, times;
         _decorate_components!(pU, loop_pos, u_max + 0.09 * urng)
     end
 
-    # ウィック: 0 = CC の流体、1..N = ウィックのセル、N+1 = 蒸発界面
-    pW = plot(; xlabel = "wick node (0: CC fluid, 1..N: cells from CC side, N+1: interface)",
+    # ウィック: 0 = CC の流体 (平板型は secondary wick)、1..N = ウィックのセル、N+1 = 蒸発界面
+    pW = plot(; xlabel = "wick node (0: CC fluid / secondary wick, 1..N: cells from CC side, N+1: interface)",
               ylabel = "T [K]", title = "wick temperature", legend = :outertopright)
     for (m, t1) in enumerate(tk)
         sub = sort(wick[wick.t .== t1, :], :cell)
@@ -444,12 +444,13 @@ function plot_distribution(prof::DataFrame, wick::DataFrame, lengths, times;
         Tcc = NaN
         cc = prof[(prof.t .== t1) .& (prof.comp .== "cc"), :]
         isempty(cc) || (Tcc = cc.T[1])
-        if !isnan(Tcc)
+        # 平板型は、cell = 0 に secondary wick が入っている。円筒型は、CC の流体温度を 0 とする
+        if !isnan(Tcc) && !(0 in sub.cell)
             xs = vcat(0.0, xs); Ts = vcat(Tcc, Ts)
         end
         if summary !== nothing && hasproperty(summary, :T_out)
             k = argmin(abs.(summary.t .- t1))
-            xs = vcat(xs, length(sub.cell) + 1.0); Ts = vcat(Ts, summary.T_out[k])
+            xs = vcat(xs, maximum(sub.cell) + 1.0); Ts = vcat(Ts, summary.T_out[k])
         end
         plot!(pW, xs, Ts; color = col, marker = :circle, ms = 4, lw = 1.8, label = "t = $(t1) s")
     end

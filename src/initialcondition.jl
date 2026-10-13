@@ -107,12 +107,12 @@ function fill_fluid_component!(cmp, p_c, kind::Symbol, e, ρ_hs, P0, z_ref, g,
 end
 
 """
-    fill_initial_state!(u0, p::LHPParams, tables)
+    fill_initial_state!(u0, p::AbstractLHPParams, tables)
 
 u0 (initialize_state の戻り値) を、物理的に決めた初期状態で埋める
 (CC出口の流速 u を除く。それは、残差から決める: set_cc_outlet_velocity!)。
 """
-function fill_initial_state!(u0, p::LHPParams, tables::FluidTables)
+function fill_initial_state!(u0, p::AbstractLHPParams, tables::FluidTables)
     c = p.cond
     g = c.g
     T0 = c.T_init
@@ -175,6 +175,13 @@ function fill_initial_state!(u0, p::LHPParams, tables::FluidTables)
         u0.wick.E[i] = wp.V[i] * ((1 - wp.por) * wp.ρ_w * wp.C_w * T_w +
                                   wp.por * p.ρ_l_ref * e_w)
     end
+    # 平板型: secondary wick (常に液で満たされている) も同じ温度から始める
+    if :swick in keys(u0)
+        sp = p.swick_p
+        u0.swick.T[1] = T_w
+        u0.swick.E[1] = sp.V * ((1 - sp.por) * sp.ρ_w * sp.C_w * T_w +
+                                sp.por * p.ρ_l_ref * e_w)
+    end
 
     # --- 壁: 接する流体と同じ温度 (蒸発器ケースは界面と同じ T_w、CCケースは T_init) ---
     T_cond_wall = c.cond_init_phase === :liquid ? T_liq : T_vap
@@ -199,7 +206,7 @@ CC出口の面の流速 u.cc.u[1] は、運動量式ではなく代数拘束
 u=0 で評価すると resid.u[1] = −ṁ_out/(ρ_l A) なので、u = −resid.u[1] を代入すれば、
 この拘束が満たされる (ṁ_out は u.cc.u に依存しないので、1回で厳密に決まる)。
 """
-function set_cc_outlet_velocity!(u0, p::LHPParams, t0)
+function set_cc_outlet_velocity!(u0, p::AbstractLHPParams, t0)
     n = length(getdata(u0))
     res = zeros(n)
     f_dae_residual!(res, zeros(n), getdata(u0), p, t0)
@@ -221,7 +228,7 @@ F(t0, u0, du) が du について線形であることを使って、微分変�
   J du_diff = −res0_diff            (微分変数の行について)
 res0 は、du=0 での残差 (代数変数の行は、整合に作ってあれば ≈0)。
 """
-function compute_du0(u0vec::AbstractVector, p::LHPParams, t0, diffmask::AbstractVector{Bool})
+function compute_du0(u0vec::AbstractVector, p::AbstractLHPParams, t0, diffmask::AbstractVector{Bool})
     n = length(u0vec)
     D = findall(diffmask)
     du = zeros(n)
@@ -259,7 +266,7 @@ end
       (3) du0 を、残差が du について線形であることを使って求める
       (4) F(t0, u0, du0) を評価して、整合性を確認する (consistency_report)
 """
-function initial_condition(geo::LHPGeometry, condition::LHPTransientCondition,
+function initial_condition(geo::AnyLHPGeometry, condition::LHPTransientCondition,
     tables::FluidTables; verbose::Bool=true)
 
     u0 = initialize_state(geo)

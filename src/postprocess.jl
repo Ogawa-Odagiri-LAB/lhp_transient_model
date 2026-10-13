@@ -38,13 +38,14 @@ end
 
 状態 c (ComponentArray) に蓄えられている、系全体のエネルギー。
 """
-function stored_energy(c, p::LHPParams)
+function stored_energy(c, p::AbstractLHPParams)
     E = 0.0
     for (comp, pc) in ((:grv, p.p_grv), (:vl, p.p_vl), (:cond, p.p_cond), (:ll, p.p_ll), (:cc, p.p_cc))
         cm = getproperty(c, comp)
         E += sum(cm.ρm .* cm.Em) * pc.V
     end
     E += sum(c.wick.E)
+    :swick in keys(c) && (E += sum(c.swick.E))   # 平板型: secondary wick
     for (wall, wp) in ((:vl, p.wp_vl), (:cond, p.wp_cond), (:ll, p.wp_ll))
         E += sum(wall_internal_energy(T, wp.V_w) for T in getproperty(c.T_wall, wall))
     end
@@ -60,7 +61,7 @@ end
 CCケース、蒸発器ケースは断熱。Q_amb_* は「壁が受け取る向き」が正なので、符号を反転する。
 残差 (residuals_wall.jl) と同じ関数を使うので、残差が仮定する放熱と一致する。
 """
-function heat_out(c, p::LHPParams)
+function heat_out(c, p::AbstractLHPParams)
     cnd = p.cond
     Q = 0.0
     for (wall, wp) in ((:vl, p.wp_vl), (:ll, p.wp_ll))
@@ -80,7 +81,7 @@ end
 系全体のエネルギー収支。保存点 (condition.saveat) の値を、台形則で積分する。
 戻り値: (ΔE, Q_in, Q_out, residual, E, Q_out_t)。E, Q_out_t は、保存点ごとの時系列。
 """
-function energy_balance(sol, p::LHPParams; verbose::Bool=true)
+function energy_balance(sol, p::AbstractLHPParams; verbose::Bool=true)
     n = length(sol.t)
     E = [stored_energy(components_at(sol, p, k), p) for k in 1:n]
     Q_in_t = [applied_heat(t, p.cond) for t in sol.t]

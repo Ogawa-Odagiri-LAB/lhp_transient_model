@@ -39,7 +39,7 @@ using ComponentArrays: ComponentArray, getdata, getaxes
 状態ベクトルと同じ並びの、各変数の代表的な大きさ (types.jl の *_scale)。
 有限差分の摂動幅の下限と、IDA の絶対許容誤差に使う。
 """
-function variable_scales(geo::LHPGeometry, condition::LHPTransientCondition)
+function variable_scales(geo::AnyLHPGeometry, condition::LHPTransientCondition)
     ones_state = initialize_state(geo)
     getdata(ones_state) .= 1.0
     return copy(getdata(restore_state(ones_state, condition)))
@@ -57,7 +57,7 @@ end
 ランダムな値を入れる (F は du について線形なので、値の大きさは関係ない)。
 物理的に妥当な範囲 (物性テーブルの範囲内) に留めるため、摂動は小さくする。
 """
-function random_probe_state(u0::AbstractVector, p::LHPParams, scales, diffmask, rng)
+function random_probe_state(u0::AbstractVector, p::AbstractLHPParams, scales, diffmask, rng)
     n = length(u0)
     u = u0 .* (1 .+ 1.0e-3 .* randn(rng, n))
     # 速度: 風上ブレンドが飽和しない大きさ。ComponentArray で u の位置を取り出す
@@ -83,7 +83,7 @@ nprobe 個のランダムな状態の和集合。対角は必ず含める。
 du の摂動は、F が du について線形なので、大きさ1で十分。u の摂動は、
 rel × max(|u_j|, 1e-3 scale_j)。
 """
-function detect_jacobian_pattern(p::LHPParams, u0::AbstractVector, t0, scales, diffmask;
+function detect_jacobian_pattern(p::AbstractLHPParams, u0::AbstractVector, t0, scales, diffmask;
     nprobe::Int=3, rel::Float64=1.0e-4, seed::Int=0)
 
     n = length(u0)

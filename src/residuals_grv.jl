@@ -53,13 +53,13 @@
 # -----------------------------------------------------------------------------
 
 """
-    grv_params(geo::GrvGeometry) -> NamedTuple
+    grv_params(geo::Union{GrvGeometry,FlatGrvGeometry}) -> NamedTuple
 
 グルーブの幾何量。pipe_params と同じフィールド (N, dl, D, A, V, θ, elev0) を
 持つので、residual_transport! や transport_ghost_up/down にそのまま渡せる。
 A, V は全溝の合計。D は矩形溝の水力直径。
 """
-grv_params(geo::GrvGeometry) = (
+grv_params(geo::Union{GrvGeometry,FlatGrvGeometry}) = (
     N = geo.N, dl = geo.dl, L = geo.L,
     D = 2 * geo.width * geo.height / (geo.width + geo.height),
     A = geo.n_grv * geo.A_grv_cross,
