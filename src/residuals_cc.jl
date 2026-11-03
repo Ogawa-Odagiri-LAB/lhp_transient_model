@@ -164,7 +164,7 @@ ComponentVector (ρm,u,Em,P,T,x)。
 
 残差の単位は、輸送管と揃えて体積あたり (質量: kg/m³/s、エネルギー: W/m³)。
 """
-function residual_cc!(resid, du, u, inlet, ṁ_out, Q_fluid, Q_leak, p, g, tables::FluidTables)
+function residual_cc!(resid, du, u, inlet, ṁ_out, Q_fluid, Q_leak, p, g, tables::FluidTables; ΔP_ne = 0.0)
     V = p.V
     ρ, Em, P, T = u.ρm[1], u.Em[1], u.P[1], u.T[1]
     elev = cell_elevation(p, 1)
@@ -186,7 +186,7 @@ function residual_cc!(resid, du, u, inlet, ṁ_out, Q_fluid, Q_leak, p, g, table
     # --- 状態拘束 (式4-6): 運動エネルギーは無視 ---
     em = Em - g * elev
     st = flash_ρe(ρ, em, tables)
-    resid.P[1] = P - st.P
+    resid.P[1] = P - st.P - ΔP_ne      # ΔP_ne: 有限速度の凝縮による蒸気側の過剰圧力 (既定 0)
     resid.T[1] = T - st.T
     resid.x[1] = u.x[1] - st.x
     return nothing
@@ -227,8 +227,8 @@ CCケース (壁、N=1) の残差。
   Q_cc_ll : 液管の壁から CCケースへ入る熱 [W] (Q_cc_ll_gain)
   Q_amb   : 周囲との熱。既定は 0 (断熱。判断事項3)
 """
-function residual_cc_wall!(resid_Tw, du_Tw, Tw, Q_fluid, Q_ec_cc, Q_cc_ll, cw; Q_amb=0.0)
-    resid_Tw[1] = cc_wall_heat_capacity(Tw[1], cw) * du_Tw[1] -
+function residual_cc_wall!(resid_Tw, du_Tw, Tw, Q_fluid, Q_ec_cc, Q_cc_ll, cw; Q_amb=0.0, C_extra=0.0)
+    resid_Tw[1] = (cc_wall_heat_capacity(Tw[1], cw) + C_extra) * du_Tw[1] -
                   (Q_ec_cc + Q_cc_ll - Q_fluid + Q_amb)
     return nothing
 end

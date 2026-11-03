@@ -8,12 +8,10 @@
 # 提供する。
 #
 # 【要確認事項 (ドキュメントとの照合で見つかったもの)】
-#   1. 式57: hconv = hI (Regime I); hI+hLT (Regime II) と明記されている。
-#      しかしRegime IIは重力支配域であり、物理的には式56のNusselt型
-#      重力項 h_Nu が加算されるべきと考えられる (以前のユーザー提供
-#      コードでも h_TP = h_I + h_Nu という実装だった)。「hLT」は「hNu」
-#      の誤記の可能性が高い。本実装では h_I + h_Nu として実装している。
-#      Shah(2009)原典での確認を推奨。
+#   1. 式57: 原ドキュメントには hconv = hI (Regime I); hI+hLT (Regime II)
+#      と書かれているが、原典 (Shah 2009/2013) の Regime II は h_I + h_Nu
+#      (式56のNusselt型重力項を加算)。「hLT」は「hNu」の誤記。
+#      【確認済み (2026-11-02)】本実装は h_I + h_Nu で、原典どおり。
 #   2. 式62 S(Retp) の Re_tp がドキュメント中で定義されていない。
 #      Chenの式の標準的な定義 (Re_tp = Re_l * F^1.25) を採用している。
 #      Carey原典 (参考文献[11], 式61の修正でも参照したもの) での
@@ -123,7 +121,7 @@ Shahの凝縮熱伝達係数 (式51-57) を、Regime I/IIでtanhブレンドす�
 props は sat_props(T, tables) の戻り値 (μ_l,μ_v,ρ_l,ρ_v,k_l,Pr_l 等
 を含むNamedTuple)。
 
-【要確認1】式57のRegime IIは h_I + h_Nu として実装している
+【確認済み (2026-11-02)】式57のRegime IIは h_I + h_Nu で、原典どおり
 (ファイル冒頭のコメント参照)。
 """
 function h_condense_shah_smooth(x, G, D, g, P, Pcrit, props; ε_J=0.1)
@@ -285,7 +283,7 @@ end
 よる単相⇔二相のブレンドだけで済む。
 """
 function h_transport_wall(ρ, u, Em, elev, T_wall, D, G, g, tables::FluidTables;
-    ε_phase=0.05, ε_mode=0.1, ε_Re=200.0, ε_J=0.1, ε_invXtt=0.02, ε_x=0.05)
+    ε_phase=0.05, ε_mode=0.1, ε_Re=200.0, ε_J=0.1, ε_invXtt=0.02, ε_x=0.05, f_cond=1.0, xps_mode=:P)
 
     # 質量流束 G は、ρ|u| で、状態変数 ρm が Newton 反復の途中で負になると負になりうる。
     # Re_LS^(-1/3) などの小数べきの底になるので、下限を守る (通常の G は 1e-2 以上)。
@@ -293,7 +291,9 @@ function h_transport_wall(ρ, u, Em, elev, T_wall, D, G, g, tables::FluidTables;
 
     em = internal_energy(Em, u, elev, g)
     P, T, x = flash_ρe(ρ, em, tables)
-    x_pseudo = pseudo_quality(em, ρ, P, T, tables)
+    # 熱伝達のブレンド用: 圧力の飽和温度基準 (過冷却液は x_pseudo<0、過熱蒸気は >1)。
+    # (T 基準の pseudo_quality は、単相液でも ≈0 になり、二相の h が半分掛かっていた)
+    x_pseudo = xps_mode === :P ? pseudo_quality_P(em, ρ, P, tables) : pseudo_quality(em, ρ, P, T, tables)   # :T は従来 (切り分け用)
 
     # --- 単相側: その場の(ρ,e)から直接、正しい相の物性が得られる ---
     μ, k, cp, Pr = transport_props(ρ, em, tables)
@@ -306,7 +306,7 @@ function h_transport_wall(ρ, u, Em, elev, T_wall, D, G, g, tables::FluidTables;
     T_sat = Tsat(P, tables)
     P_sat_Twall = Psat(T_wall, tables)
 
-    h_cond = h_condense_shah_smooth(x, G, D, g, P, tables.Pcrit, props; ε_J=ε_J)
+    h_cond = f_cond * h_condense_shah_smooth(x, G, D, g, P, tables.Pcrit, props; ε_J=ε_J)   # f_cond: 凝縮の h の係数 (既定 1)
     h_chen = h_chen_smooth(T_wall, T_sat, P_sat_Twall, P, tables.Pcrit, x, G, D, props, props.h_fg; ε_invXtt=ε_invXtt)
     h_pd = h_dougall_rohsenow_smooth(x, G, D, props)
     h_boil = h_boiling_smooth(x, h_chen, h_pd; ε_x=ε_x)

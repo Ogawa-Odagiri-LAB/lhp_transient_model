@@ -11,11 +11,14 @@ using Sundials
 using DiffEqBase: DAEProblem, DAEFunction, solve
 
 export LHPGeometry, WickGeometry, GrvGeometry, TLGeometry, CondGeometry, CCGeometry
+export CondPlateGeometry, ColdPlateGeometry
 export FlatLHPGeometry, FlatWickGeometry, SecondaryWickGeometry, FlatGrvGeometry, FlatCCGeometry
 export LHPTransientCondition
 export init_fluid_lookups, FluidTables
 export solve_transient_lhp!, components_at, applied_heat
-export energy_balance
+export energy_balance, energy_partition, stored_energy_parts, ll_end_budget, cc_interface_diag, loop_heat_diag, h_failure_diag, failure_state_diag, failure_residual_diag, failure_autopsy, ll_thermal_diag, startup_onset_diag
+export measured_initial, total_charge, pchip_interp
+export solve_steady_lhp!, save_steady_state, load_steady_state
 export save_results, results_summary, results_profiles, results_wick, results_geometry
 
 # プロット (plot.jl) は、計算とは独立の単体のファイルで、このモジュールには含めない。
@@ -41,11 +44,15 @@ include(joinpath(@__DIR__, "residuals_main.jl"))       # 全体の残差 (円筒
 include(joinpath(@__DIR__, "residuals_flatwick.jl"))   # 平板型: primary / secondary wick
 include(joinpath(@__DIR__, "residuals_flatcc.jl"))     # 平板型: CC
 include(joinpath(@__DIR__, "residuals_flatevapcase.jl")) # 平板型: 蒸発器ケース
+include(joinpath(@__DIR__, "residuals_housing.jl"))     # 平板型: 断熱材・PEEK (周囲との遅い熱経路)
 include(joinpath(@__DIR__, "residuals_flatmain.jl"))   # 平板型: 全体の残差
 include(joinpath(@__DIR__, "initialcondition.jl"))     # 整合初期条件
+include(joinpath(@__DIR__, "initial_from_measurements.jl")) # 実測の温度・封入量からの初期条件
 include(joinpath(@__DIR__, "sparsity.jl"))             # ヤコビアンの疎構造
 include(joinpath(@__DIR__, "solverfuncs.jl"))          # IDA による時間積分
 include(joinpath(@__DIR__, "postprocess.jl"))          # 後処理 (エネルギー収支)
+include(joinpath(@__DIR__, "autopsy.jl"))              # IDA が止まったときの残差の滑らかさ・パターンの検査 (診断のみ)
+include(joinpath(@__DIR__, "steadyfuncs.jl"))          # 定常計算 (擬似時間発展)
 include(joinpath(@__DIR__, "savefuncs.jl"))            # 結果の保存 (CSV)
 
 end

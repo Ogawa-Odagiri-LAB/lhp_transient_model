@@ -17,8 +17,8 @@ condition = LHPTransientCondition(
     T_cond = 15.0 + 273.15,        # 凝縮器プレートの温度 [K]
     T_amb  = 25.0 + 273.15,        # 周囲温度 [K]
     T_init = 25.0 + 273.15,        # 初期の基準温度 [K]
-    Q_apply_init = 5.0,           # ステップ前の印加熱量 [W]
-    Q_apply = 10.0,                # ステップ後の印加熱量 [W]
+    Q_apply_init = 20.0,           # ステップ前の印加熱量 [W]
+    Q_apply = 40.0,                # ステップ後の印加熱量 [W]
     t_step = 50.0, τ_step = 1.0,   # t = 50 s から 1 s かけて 20 W → 40 W
     ΔT_startup = 0.0,              # 起動判定 (0 なら判定なし)
     t_init = 0.0, t_end = 200.0,
@@ -43,7 +43,13 @@ tables = init_fluid_lookups(condition.fluid, T_min=230.0, T_max=360.0, P_max=4.5
 # --- 計算 ---
 # 既定: 線形ソルバー KLU (疎行列)、BDF の最大次数 2、reltol=1e-4、atol_frac_u=1e-7
 # (solverfuncs.jl 冒頭に、これらの設定の根拠 (実測) を記載)
-t_wall = @elapsed (sol, p, u0) = solve_transient_lhp!(geo, condition, tables)
+# 定常計算 (steady.jl) の結果から始めるときは、use_steady = true にする
+# (condition の T_cond, T_amb, Q_apply_init は、steady.jl と同じにすること)。
+use_steady = false
+steady_file = joinpath(@__DIR__, "..", "res", "steady_ammonia", "steady_state.jls")
+u_init = use_steady ? load_steady_state(steady_file, geo) : nothing
+
+t_wall = @elapsed (sol, p, u0) = solve_transient_lhp!(geo, condition, tables; u_init = u_init)
 println("計算時間: ", round(t_wall, digits = 1), " s (シミュレーション ", condition.t_end - condition.t_init, " s)")
 
 # --- エネルギー収支 (蓄積の変化 = 印加熱 − 放熱。残差が入力の数 % を超えるなら要確認) ---

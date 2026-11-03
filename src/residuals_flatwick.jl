@@ -29,7 +29,7 @@
 #
 # 【形状の読み取り (断面図)】 secondary wick は、CC流体 (半円 D_i) を囲む半円環
 #   (半径方向 (D_swick−D_i)/2) と、平面側・両端面の厚さ T_swick の層から成る。
-#   外寸は直径 D_swick、長さ dl + 2 T_swick の半円筒で、V_s = 外寸の体積 − CC流体の体積。
+#   V_s = 半円環 + 平面側の層 (D_swick × T_swick × 全長) + 両端面の2枚。
 # =============================================================================
 
 """
@@ -69,7 +69,7 @@ end
 
 secondary wick の幾何量・熱容量用の量と、CCケース ↔ secondary wick の熱伝導の量。
 
-    V       … 体積 [m³] (外寸の半円筒 D_swick × (dl+2T_swick) − CC流体の半円筒)
+    V       … 体積 [m³] (半円環 + 平面側の層 + 両端面)
     k_eff   … 固相の実効熱伝導率 (マクスウェル、φ_s)
     A_cs    … CCケースとの接触面積 S_swick [m²]
     t_c, t_s… CCケース壁の厚さ (D_o−D_swick)/2、secondary wick の半径方向厚さ (D_swick−D_i)/2
@@ -77,14 +77,29 @@ secondary wick の幾何量・熱容量用の量と、CCケース ↔ secondary 
 function swick_params(sgeo::SecondaryWickGeometry, cc::FlatCCGeometry, k_s, k_l)
     k_eff = k_eff_maxwell(k_s, k_l, sgeo.φ_s)
     L_sw = cc.dl + 2 * cc.T_swick                                   # secondary wick の全長 (両端面を含む)
-    # 外寸: 直径 D_swick、全長 dl + 2 T_swick の半円筒 (平面側・両端面は厚さ T_swick の層)。
-    # secondary wick の体積 = 外寸の半円筒 − CC流体の半円筒 (D_i, 長さ dl)
-    L_sw = cc.dl + 2 * cc.T_swick
-    V_env = 0.5 * (π / 4) * cc.D_swick^2 * L_sw
-    V_fluid = cc.A_cross * cc.dl
-    return (V = V_env - V_fluid, k_eff = k_eff,
+    # 形状: CC流体 (半円 D_i) を囲む半円環 (半径方向 (D_swick−D_i)/2) に、
+    # 厚さ T_swick の平面側の層 (primary wick との間) と両端面を足したもの
+    L_sw = cc.dl + 2 * cc.T_swick                                   # secondary wick の全長 (両端面を含む)
+    V_ring = 0.5 * (π / 4) * (cc.D_swick^2 - cc.D_i^2) * cc.dl      # 半円環
+    V_flat = cc.D_swick * cc.T_swick * L_sw                         # 平面側の層
+    V_ends = 2 * 0.5 * (π / 4) * cc.D_swick^2 * cc.T_swick          # 両端面 (半円板 × 厚さ) 2枚
+    # --- 2 節点 (A: 平面側 + 両端面 = primary wick・液に接する側、B: 半円環 = 曲面 = 蒸気が凝縮する壁 (A_vap) の側) ---
+    t_ring = (cc.D_swick - cc.D_i) / 2                                # 半円環の半径方向の厚さ
+    r_m    = (cc.D_i + cc.D_swick) / 4                                # 半円環の平均半径
+    # A–B の熱伝導 (swick の k_eff。幾何だけで決まり、フィット係数なし。断面と経路は図面からの見積り):
+    #   (1) 平面側の層 ↔ 半円環: 半円環の端 2 つ (断面 2 t_ring dl)。経路 = 平面の半幅の中心まで D_swick/4 + 半円環の 1/4 周の中心まで (π/2) r_m / 2
+    #   (2) 両端面 ↔ 半円環: 半円環の両端の縁 (断面 π r_m × t_ring × 2 枚)。経路 = 端面の厚さの半分 + 軸方向の 1/4 長さ (T_swick/2 + dl/4)
+    A_edge = 2 * t_ring * cc.dl
+    L_edge = cc.D_swick / 4 + (π / 2) * r_m / 2
+    A_rim  = 2 * π * r_m * t_ring
+    L_rim  = cc.T_swick / 2 + cc.dl / 4
+    G_AB   = k_eff * (A_edge / L_edge + A_rim / L_rim)
+    return (V = V_ring + V_flat + V_ends, k_eff = k_eff,
             por = sgeo.φ_s, ρ_w = sgeo.ρ_swick, C_w = sgeo.Cp_swick,
-            A_cs = cc.S_swick, t_c = (cc.D_o - cc.D_swick) / 2, t_s = (cc.D_swick - cc.D_i) / 2)
+            A_cs = cc.S_swick, t_c = (cc.D_o - cc.D_swick) / 2, t_s = (cc.D_swick - cc.D_i) / 2,
+            V_A = V_flat + V_ends, V_B = V_ring, G_AB = G_AB,
+            A_cs_A = (π / 4) * cc.D_swick^2,  t_s_A = cc.T_swick,        # 両端面 (CCケースの端の壁に接する)
+            A_cs_B = π * cc.D_swick * 0.5 * cc.dl, t_s_B = t_ring)        # 曲面 (CCケースの曲面の壁に接する)
 end
 
 """
@@ -98,6 +113,48 @@ function Q_case_swick(T_cw, T_s, sp)
     G_c = k_sus304(T_cw) * sp.A_cs / (sp.t_c / 2)
     G_s = sp.k_eff * sp.A_cs / (sp.t_s / 2)
     return (T_cw - T_s) / (1 / G_c + 1 / G_s)
+end
+
+"""
+    Q_case_swick2(T_cw, T_A, T_B, sp) -> (Q_A, Q_B, Q)
+
+CCケース (温度 T_cw) から secondary wick の 2 節点 (A: 両端面、B: 曲面) への熱伝導 (CCケースが熱ければ正)。
+Q_case_swick と同じ直列の式を、節点ごとの面積・厚さ (A_cs_A, t_s_A / A_cs_B, t_s_B) で使う。Q = Q_A + Q_B (CCケースが失う熱)。
+"""
+function Q_case_swick2(T_cw, T_A, T_B, sp)
+    G_c = k_sus304(T_cw) / (sp.t_c / 2)
+    QA = (T_cw - T_A) * sp.A_cs_A / (1 / G_c + (sp.t_s_A / 2) / sp.k_eff)
+    QB = (T_cw - T_B) * sp.A_cs_B / (1 / G_c + (sp.t_s_B / 2) / sp.k_eff)
+    return (Q_A = QA, Q_B = QB, Q = QA + QB)
+end
+
+"""
+    residual_swick2!(resid, du, s, sp, ṁ, T_cc, T_w1, P_w, Q_cs_A, Q_cs_B, Q_nc_A, Q_nc_B, Q_wall, Q_leak, tables; ρ_l_ref, ε_m=1e-8)
+
+secondary wick の 2 節点の残差 (s.E, s.T は各 2 要素: [1] = A (平面側 + 両端面)、[2] = B (半円環))。
+  A: dE_A/dt = ṁ(⟨h⟩_in − ⟨h⟩_out) + Q_cs_A − Q_nc_A + Q_leak + Q_AB      (液の流れ ṁ・primary wick からの熱は A を通る)
+  B: dE_B/dt = Q_cs_B − Q_nc_B + Q_wall − Q_AB                           (壁面凝縮の潜熱 Q_wall は B へ)
+  Q_AB = G_AB (T_B − T_A)  (B → A)
+"""
+function residual_swick2!(resid, du, s, sp, ṁ, T_cc, T_w1, P_w, Q_cs_A, Q_cs_B, Q_nc_A, Q_nc_B, Q_wall, Q_leak,
+    tables::FluidTables; ρ_l_ref, ε_m=1e-8)
+
+    T_A = s.T[1]
+    T_B = s.T[2]
+    wm = smooth_step(ṁ, ε_m)
+    h_cc = liquid_props(T_cc, P_w, tables).h
+    lpA = liquid_props(T_A, P_w, tables)
+    lpB = liquid_props(T_B, P_w, tables)
+    h_w1 = liquid_props(T_w1, P_w, tables).h
+    hf_in = wm * h_cc + (1 - wm) * lpA.h
+    hf_out = wm * lpA.h + (1 - wm) * h_w1
+    Q_AB = sp.G_AB * (T_B - T_A)
+
+    resid.E[1] = du.E[1] - (ṁ * (hf_in - hf_out) + Q_cs_A - Q_nc_A + Q_leak + Q_AB)
+    resid.E[2] = du.E[2] - (Q_cs_B - Q_nc_B + Q_wall - Q_AB)
+    resid.T[1] = s.E[1] - sp.V_A * ((1 - sp.por) * sp.ρ_w * sp.C_w * T_A + sp.por * ρ_l_ref * lpA.e)
+    resid.T[2] = s.E[2] - sp.V_B * ((1 - sp.por) * sp.ρ_w * sp.C_w * T_B + sp.por * ρ_l_ref * lpB.e)
+    return nothing
 end
 
 """

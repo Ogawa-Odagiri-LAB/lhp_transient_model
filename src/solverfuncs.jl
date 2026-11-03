@@ -41,6 +41,7 @@
 
 using Sundials
 using DiffEqBase: DAEProblem, DAEFunction, solve
+import DiffEqBase
 
 """
     absolute_tolerances(geo, condition; atol_frac=1e-9, atol_frac_u=atol_frac) -> Vector{Float64}
@@ -63,6 +64,16 @@ function absolute_tolerances(geo, condition; atol_frac::Float64=1.0e-9,
     for comp in condition.fluid_comp
         getproperty(frac, comp).u .= atol_frac_u
     end
+    # 核沸騰の活性度 n (0〜1): 絶対許容誤差 1e-6 (atol_frac の 1e-9 だと厳しすぎる)
+    :nuc in keys(frac) && (frac.nuc.n .= 1.0e-6; frac.nuc.nc .= 1.0e-6)
+    :cplate in keys(frac) && (frac.cplate.T .= 1.0e-6)
+    :hi in keys(frac) && (frac.hi.T .= 1.0e-6; frac.peek.T .= 1.0e-6)
+    :cca in keys(frac) && (frac.cca.T .= 1.0e-6)
+    :eca in keys(frac) && (frac.eca.T .= 1.0e-6)
+    :plate in keys(frac) && (frac.plate.T .= 1.0e-6)    # 凝縮器プレートの温度 [K] (スケール 1)
+    # 平板型の CC (気相 1 + 液 16 層): 液の層の温度 Tl [K] (スケール 1)、名目の空き容積 X [m³] (気相の体積 約 1e-6 m³ で、圧力 P ∝ mv/X なので厳しめ)、
+    # 気相の質量 mv [kg] (約 2e-5 kg)
+    :ccl in keys(frac) && (frac.ccl.Tl .= 1.0e-6; frac.ccl.X .= 1.0e-11; frac.ccl.mv .= 1.0e-12)
     return copy(getdata(frac)) .* variable_scales(geo, condition)
 end
 
@@ -162,17 +173,20 @@ end
   max_order: BDF の最大次数 (1〜5)。3〜5次は、減衰の弱い振動 (音響波) に対して安定
              領域が狭く、刻みが強く制限されることがある。2 にすると A 安定になり、
              振動に強くなる (精度は下がる)。
+  u_init: 状態ベクトル (定常計算の結果など)。指定すると、物理的に決めた初期状態の代わりに、
+             これを初期値にする (steadyfuncs.jl の load_steady_state)。
   kwargs は、IDA の solve にそのまま渡される (例: initializealg=...)。
 """
 function solve_transient_lhp!(geo::AnyLHPGeometry, condition::LHPTransientCondition,
     tables::FluidTables; linear_solver::Symbol=:KLU, reltol::Float64=1.0e-4,
     atol_frac::Float64=1.0e-9, atol_frac_u::Float64=1.0e-7, dtmax::Float64=Inf,
     maxiters::Int=10^7, max_order::Int=2, max_nonlinear_iters::Int=4,
-    verbose::Bool=true, guard_domain_errors::Bool=true, kwargs...)
+    verbose::Bool=true, guard_domain_errors::Bool=true,
+    u_init::Union{Nothing,AbstractVector}=nothing, kwargs...)
 
     DOMAIN_ERROR_COUNT[] = 0
-    # --- 整合初期条件 ---
-    u0, du0, p = initial_condition(geo, condition, tables; verbose=verbose)
+    # --- 整合初期条件 (u_init があれば、その状態から始める) ---
+    u0, du0, p = initial_condition(geo, condition, tables; verbose=verbose, u_init=u_init)
     diffmask = Bool.(getdata(initialize_differential_vars(geo)))
     scales = variable_scales(geo, condition)
     abstol = absolute_tolerances(geo, condition; atol_frac=atol_frac, atol_frac_u=atol_frac_u)
@@ -199,9 +213,17 @@ function solve_transient_lhp!(geo::AnyLHPGeometry, condition::LHPTransientCondit
     # 渡さない。保存時刻の指定は、IDA が保存時刻ごとに停止・再開して、刻みが歪む疑い
     # がある (test_solver_sweep.jl 参照)。
     save_kwargs = haskey(kwargs, :save_everystep) ? NamedTuple() : (saveat = condition.saveat,)
+    # IDA の既定の初期化チェック (CheckInit) は、F(u0, du0) の最大値を abstol (圧力で 1e-3 Pa、
+    # 密度で 5e-8 kg/m³ など) 以下に要求する。この要求は厳しすぎて、整合に作った初期値でも
+    # 通らないことがある (u_init から始めるとき、壁の初期温度を指定したときなど)。
+    # initial_condition が、整合性を自分で検算して表示する (consistency_report) ので、
+    # IDA 側のチェックはやめる (最初のステップの Newton 反復が、残差を詰める)。
+    # initializealg を明示した場合は、それに従う。
+    init_kwargs = haskey(kwargs, :initializealg) ? NamedTuple() :
+                  (initializealg = DiffEqBase.SciMLBase.NoInit(),)
     sol = solve(prob, solver; abstol=abstol, reltol=reltol,
                 tstops=tstops, dtmax=dtmax, maxiters=maxiters,
-                save_kwargs..., kwargs...)
+                save_kwargs..., init_kwargs..., kwargs...)
 
     if DOMAIN_ERROR_COUNT[] > 0
         println("注意: 残差の評価で DomainError を ", DOMAIN_ERROR_COUNT[], " 回捕まえ、その試行点を棄却させました ",
