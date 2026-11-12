@@ -108,7 +108,7 @@ Q_ec_wall(T_ec, ec, T_nb, wp_nb) = wall_axial_conductance(T_ec, ec, T_nb, wp_nb)
   Q_ec_grv  : グルーブ蒸気への熱 (式45)
 
 """
-function residual_evapcase(du_Tec, T_ec, ec, Q_apply, Q_ec_vl, Q_ec_cc, Q_ec_wick, Q_ec_grv)
-    C = evap_case_heat_capacity(T_ec, ec)
+function residual_evapcase(du_Tec, T_ec, ec, Q_apply, Q_ec_vl, Q_ec_cc, Q_ec_wick, Q_ec_grv; C_extra = 0.0)
+    C = evap_case_heat_capacity(T_ec, ec) + C_extra
     return C * du_Tec - (Q_apply - Q_ec_vl - Q_ec_cc - Q_ec_wick - Q_ec_grv)
 end

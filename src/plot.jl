@@ -244,7 +244,7 @@ function loop_lengths(x)
         return (grv = Float64(x.grv), vl = Float64(x.vl), cond = Float64(x.cond),
                 ll = Float64(x.ll), cc = Float64(x.cc))
     end
-    return (grv = Float64(x.grv.L), vl = Float64(x.vl.L), cond = Float64(x.cond.L),
+    return (grv = Float64(hasproperty(x.grv, :L_grv) ? x.grv.L_grv : x.grv.L), vl = Float64(x.vl.L), cond = Float64(x.cond.L),
             ll = Float64(x.ll.L), cc = Float64(x.cc.L))
 end
 

@@ -125,21 +125,44 @@ Q_extra を、ウィックの最外セルの熱源として渡す (residual_wick
 h_N, h_out は、セルNと界面の液のエンタルピー (式47の出口側の面で使う)。
 """
 function wick_interface(T_N, P_grv, T_ec, h_ev, A_ec_wick, G_N, P_w, tables::FluidTables;
-    λ_includes_sensible=false, T_cc=T_N, ΔT_startup=0.0, ε_startup=0.1)
+    λ_includes_sensible=false, T_cc=T_N, ΔT_startup=0.0, ε_startup=0.1, w_wet=0.0,
+    free_interface=false, q_evap_max=0.0)
 
-    T_out = Tsat(P_grv, tables)
-    sp = sat_props(T_out, tables)
-    Q_ec = h_ev * A_ec_wick * (T_ec - T_out)
+    T_sat = Tsat(P_grv, tables)
+    sp = sat_props(T_sat, tables)
+
+    # 起動判定のゲート (パラメータ ΔT_startup による分岐で、状態依存の if ではない)
+    g_s = ΔT_startup > 0 ? smooth_step(soft_abs(T_N - T_cc, 1.0e-3) - ΔT_startup, ε_startup) : 1.0
+
+    # グルーブが濡れている (w_wet→1) 間は、界面の蒸発を止める (流速 0)。熱は最外セルへ入る
+    # (ドキュメント 2.8.1 式83)。w_wet=0 (既定) なら従来どおり。
+    g_s = g_s * (1 - w_wet)
+
+    # 界面の温度。蒸発しているとき (g_s=1) は T_sat(P_grv)。蒸発が止まっているとき (g_s=0) は、
+    # 界面は体積を持たないので、蒸発器ケースから来る熱 h_ev A (T_ec − T_out) と、セルへ渡す
+    # 熱 G_N (T_out − T_N) が釣り合う温度 (直列の熱抵抗の中間の温度)。T_out を T_sat に
+    # 固定したままだと、セルが T_ec より高温になっても、T_ec から熱が入り続けてしまう
+    # (熱力学の第2法則に反する)。free_interface=true のとき、この2つを g_s で滑らかにつなぐ。
+    hA = h_ev * A_ec_wick
+    T_out = if free_interface
+        T_free = (hA * T_ec + G_N * T_N) / (hA + G_N)
+        g_s * T_sat + (1 - g_s) * T_free
+    else
+        T_sat
+    end
+    Q_ec = hA * (T_ec - T_out)
     Q_N = G_N * (T_out - T_N)
 
     h_N = liquid_props(T_N, P_w, tables).h
     h_out = liquid_props(T_out, P_w, tables).h
     λ = λ_includes_sensible ? sp.h_v - h_N : sp.h_fg
 
-    # 起動判定のゲート (パラメータ ΔT_startup による分岐で、状態依存の if ではない)
-    g_s = ΔT_startup > 0 ? smooth_step(soft_abs(T_N - T_cc, 1.0e-3) - ΔT_startup, ε_startup) : 1.0
-
-    ṁ = g_s * (Q_ec - Q_N) / λ
+    # 蒸発熱の上限 (q_evap_max>0): ṁλ = Qcap tanh(g_s (Q_ec−Q_N)/Qcap)。ゲートが開いた直後に
+    # ウィックに蓄えられていた顕熱が一気に放出されるのを抑える。超過分はセルに残る
+    # (Q_extra としてセルへ戻すので、エネルギーは保存する)。
+    Q_tot = g_s * (Q_ec - Q_N)
+    Q_evap = q_evap_max > 0 ? q_evap_max * tanh(Q_tot / q_evap_max) : Q_tot
+    ṁ = Q_evap / λ
     Q_extra = Q_ec - Q_N - ṁ * λ
     return (T_out = T_out, Q_ec = Q_ec, Q_N = Q_N, ṁ = ṁ, λ = λ, h_N = h_N, h_out = h_out,
             Q_extra = Q_extra, g_s = g_s)

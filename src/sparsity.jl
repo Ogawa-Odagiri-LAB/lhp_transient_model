@@ -114,6 +114,46 @@ function detect_jacobian_pattern(p::AbstractLHPParams, u0::AbstractVector, t0, s
             end
         end
     end
+    # グルーブの核沸騰 (grv_boiling): 濡れの重み w_wet は smooth_step で、プローブ状態 (IC 近傍) では
+    # 飽和して (厳密に 0 か 1)、ビット単位の検出では依存が見えない。しかし w_wet が 0〜1 の間に
+    # あるとき、ṁ (界面ゲート) を通じて、グルーブの状態が、グルーブ・ウィック・secondary wick・
+    # CC・蒸発器ケースの行に効く。構造的に分かっているので、その分を明示的に加える。
+    if hasproperty(p.cond, :grv_boiling) && p.cond.grv_boiling
+        labels = variable_labels(p.axes, n)
+        cols = findall(l -> startswith(l, "grv.") || startswith(l, "nuc."), labels)
+        rows = findall(l -> startswith(l, "grv.") || startswith(l, "wick.") ||
+                            startswith(l, "swick.") || startswith(l, "cc.") ||
+                            startswith(l, "T_wall.evap") || startswith(l, "nuc."), labels)
+        pattern[rows, cols] .= true
+        # 核沸騰の活性度 n (nuc.n、grv_evap_gate = :nucleation): n の式は T_ec (T_wall.evap) とグルーブの圧力に依存する
+        rows_n = findall(l -> startswith(l, "nuc."), labels)
+        cols_n = findall(l -> startswith(l, "T_wall.evap") || startswith(l, "grv.") || startswith(l, "nuc."), labels)
+        pattern[rows_n, cols_n] .= true
+    end
+    # 平板型の新しい CC (気相 1 + 液 16 層。状態 ccl = Tl, X, mv): 層の間の流れの向きの重み (smooth_step) と、凝縮の mv/(mv + m_ε)、
+    # 沸騰のゲートは、プローブ状態では飽和して依存が見えないことがある。構造的に分かっているので、ccl の全ての変数を互いに、
+    # および cc (圧力 P と要約)、グルーブ・ウィック・secondary wick・液管の最終セル・蒸発器ケース・核沸騰の変数と結びつける。
+    labels_ccl = variable_labels(p.axes, n)
+    ccl_idx = findall(l -> startswith(l, "ccl."), labels_ccl)
+    if !isempty(ccl_idx)
+        Nl = p.p_ll.N
+        ll_last(l) = startswith(l, "ll.") && endswith(l, "[$(Nl)]")    # 流入 ṁ_in は液管の最終セルだけに依存 (全セルを入れると色の数が激増する)
+        oth = findall(l -> startswith(l, "cc.") || startswith(l, "grv.") || startswith(l, "wick.") ||
+                           startswith(l, "swick.") || ll_last(l) || startswith(l, "nuc.") ||
+                           startswith(l, "T_wall.evap"), labels_ccl)
+        pattern[ccl_idx, ccl_idx] .= true
+        pattern[ccl_idx, oth] .= true
+        pattern[oth, ccl_idx] .= true
+    end
+    # CC の核沸騰 (cc_boiling): 沸騰開始のゲート w_on も smooth_step で、プローブ状態では飽和する。
+    # Q_fluid は、CC の状態 (T, P, x, ρm) と secondary wick の T に依存し、CC と secondary wick の
+    # 行に効く。
+    if hasproperty(p.cond, :cc_boiling) && p.cond.cc_boiling
+        labels = variable_labels(p.axes, n)
+        cols = findall(l -> startswith(l, "cc.") || startswith(l, "ccl.") || startswith(l, "swick."), labels)
+        rows = findall(l -> startswith(l, "cc.") || startswith(l, "ccl.") || startswith(l, "swick."), labels)
+        pattern[rows, cols] .= true
+    end
     for i in 1:n
         pattern[i, i] = true
     end

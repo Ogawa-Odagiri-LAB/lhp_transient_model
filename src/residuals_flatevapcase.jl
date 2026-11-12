@@ -30,6 +30,39 @@ flat_evap_case_params(geo::FlatGrvGeometry) = (
 )
 
 """
+    flat_cc_junction_params(geo_grv, geo_cc) -> (ec, a, ab)
+
+CC ケースを 2 節点 (A: 蒸発器側、B: 頂部側) にしたときの熱伝導の経路 (wall_axial_conductance の (A_cross, dl))。
+  蒸発器ケース → A : 断面 A_j = 2 W_o t_shell + 2 W_o t_end (ドームの曲面の壁 2 つと端面 2 つの付け根)、
+                     蒸発器ケース側の半経路 H_case/2、A 側の半経路 D_o/8。
+  A → B            : 断面 A_ab = 2 W_o t_shell + 2 c t_end (c = 高さ D_o/4 での端面の弦 2√((W_o/2)² − (D_o/4)²))、
+                     経路は A の中心から B の中心まで D_o/4 (両側の半経路 D_o/8)。
+[判断事項: 断面と経路は図面からの見積り。CAD・実機の寸法で見直せる。]
+"""
+function flat_cc_junction_params(geo_grv::FlatGrvGeometry, geo_cc::FlatCCGeometry)
+    A_j  = 2 * geo_cc.W_o * geo_cc.t_shell + 2 * geo_cc.W_o * geo_cc.t_end
+    chord = 2 * sqrt(max((geo_cc.W_o / 2)^2 - (geo_cc.D_o / 4)^2, 0.0))
+    A_ab = 2 * geo_cc.W_o * geo_cc.t_shell + 2 * chord * geo_cc.t_end
+    return (ec = (A_cross = A_j, dl = geo_grv.H_case),
+            a  = (A_cross = A_j, dl = geo_cc.D_o / 4),
+            ab = (A_cross = A_ab, dl = geo_cc.D_o / 4))
+end
+
+"""
+    flat_ec_cc_flows(c, p, T_ec, T_A, T_B) -> (Q_ec_in, Q_ab)
+
+蒸発器ケース → CC ケースへ入る熱 Q_ec_in [W] (1 節点: B へ、2 節点: A へ) と、A → B の熱 Q_ab [W] (1 節点では 0)。
+"""
+function flat_ec_cc_flows(c, p, T_ec, T_A, T_B)
+    if c.cc_2node
+        Q_in = c.f_ec_cc * wall_axial_conductance(T_ec, p.cc2.ec, T_A, p.cc2.a) * (T_ec - T_A)
+        Q_ab = wall_axial_conductance(T_A, p.cc2.ab, T_B, p.cc2.ab) * (T_A - T_B)
+        return (Q_ec_in = Q_in, Q_ab = Q_ab)
+    end
+    return (Q_ec_in = c.f_ec_cc * Q_ec_wall(T_ec, p.ec_h, T_B, p.cw_h), Q_ab = 0.0)
+end
+
+"""
     flat_ec_cc_params(geo_grv::FlatGrvGeometry, geo_cc::FlatCCGeometry) -> (ec_h, cw_h)
 
 蒸発器ケース ↔ CCケースの熱伝導の経路 (上の説明)。

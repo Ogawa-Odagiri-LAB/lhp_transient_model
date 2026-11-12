@@ -48,8 +48,28 @@ end
 経由すること (テーブルの内部構造が変わっても残差関数側を変更せずに
 済むようにするため)。
 """
+# P(ρ,e) は、飽和液線 (δ = ρ − ρ_sl(e) = 0) で傾きが約 1.4 万倍に跳ねる折れを持つ
+# (二相側 dP/dρ ≈ 129、液側 ≈ 1.84e6 Pa/(kg/m³))。前線セルがこの折れをまたぐと、Newton が収束しない。
+# |δ| < ε の範囲だけ、両側の傾きを保ったまま 2 次曲線でつなぎ、傾きを連続にする。
+# 飽和線から ε 以上離れた領域は変わらない。飽和線上の P は最大で (s_液 − s_二相) ε/4 だけ高くなる
+# (ε = 0.002 kg/m³ で約 0.9 kPa)。ε ≤ 0 で無効 (従来の折れ)。
+const P_SMOOTH_EPS = Ref(0.002)
+
+function P_smoothed(ρ, e, tables::FluidTables)
+    f = tables.P_of_ρe
+    ε = P_SMOOTH_EPS[]
+    δ = ρ - f.ρ_ref(e)
+    (ε > 0 && abs(δ) < ε) || return f(ρ, e)
+    P_a = f.itp(e, -ε)
+    P_0 = f.itp(e, zero(ε))
+    P_b = f.itp(e, ε)
+    s_a = (P_0 - P_a) / ε
+    s_b = (P_b - P_0) / ε
+    return P_a + s_a * (δ + ε) + (s_b - s_a) * (δ + ε)^2 / (4ε)
+end
+
 flash_ρe(ρ, e, tables::FluidTables) = (
-    P = tables.P_of_ρe(ρ, e),
+    P = P_smoothed(ρ, e, tables),
     T = tables.T_of_ρe(ρ, e),
     x = tables.x_of_ρe(ρ, e),
 )
@@ -208,5 +228,21 @@ function pseudo_quality(em, ρ, P, T, tables::FluidTables)
     h_m = em + P / ρ
     h_l = tables.h_l_sat(T)
     h_v = tables.h_v_sat(T)
+    return (h_m - h_l) / (h_v - h_l)
+end
+
+"""
+    pseudo_quality_P(em, ρ, P, tables) -> x_ps
+
+熱伝達の単相⇔二相のブレンド用の疑似乾き度。`pseudo_quality` はそのセル自身の温度 T での
+飽和エンタルピーを基準にするため、単相液では過冷却度に関係なく ≈0、単相蒸気では ≈1 になる
+(過冷却液にも二相の h が半分掛かる)。こちらは圧力の飽和温度 Tsat(P) を基準にするので、
+過冷却液は x_ps < 0 (過冷却度 1 K で約 −0.004)、過熱蒸気は x_ps > 1 に伸びる。
+"""
+function pseudo_quality_P(em, ρ, P, tables::FluidTables)
+    h_m = em + P / ρ
+    Ts = Tsat(P, tables)
+    h_l = tables.h_l_sat(Ts)
+    h_v = tables.h_v_sat(Ts)
     return (h_m - h_l) / (h_v - h_l)
 end

@@ -25,7 +25,7 @@ result_name = "transient_flat_ammonia"
 # 結果のフォルダ (transient.jl の save_results の出力先)
 RES_DIR = joinpath(@__DIR__, "..", "res", result_name)
 # 分布を見たい時刻 [s] (保存されている時刻のうち、最も近いものを使う)
-TIMES = [10.0, 50.0, 100.0, 200.0]
+TIMES = [5.0, 15.0, 50.0, 100.0, 200.0]
 # 作動流体 (蒸発による熱 mdot × h_fg を計算するのに使う)
 FLUID = "ammonia"
 # 基準線 (壁温度の図に引く)。transient.jl の運転条件と同じ値にする
