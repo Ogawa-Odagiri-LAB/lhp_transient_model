@@ -49,6 +49,24 @@
 #   ・液の圧縮性は、体積弾性率 K_liq (T_init の飽和液、表の ρ(P, e) から) 一定。
 #   ・壁面凝縮 (cc_wall_cond = true): 液面の凝縮に比例して壁面 (A_vap) にも凝縮する (比 = 熱浸透率 × 面積の比 × 温度差の比 g_T (cc_wall_dT = true のとき)。フィット係数なし)。壁面の潜熱は secondary wick へ、凝縮水は層 1 へ。false なら液面だけ。
 #   ・自然対流の代表長さ L は円筒型と同じ内径 D_i。平面側 (A_flat) は最下層、曲面・端面の液は層の体積の割合で配分する。
+#
+# 【姿勢 (FlatCCGeometry.orientation)】 上の説明は下面加熱 (:heat_bottom、既定)。:heat_bottom の計算は従来と同じ。
+#   上面加熱 (:heat_top、上下反転) では、平面 (primary wick 側) が上、曲面が下になる。変わるのは次の点だけ。
+#   ・幾何: 液は曲面の底に中心角 θ_liq の円弓形で溜まり (cc_bottom_liquid_geometry)、蒸気は平面側を占める。
+#     層 1 = 気液界面側、層 N = 底 (曲面の最下部) の並びは同じ。気液界面の面積 A_if = 弦の幅 × 長さ で、弦の位置は
+#     平面 (円の中心) から h_vap 下 (下面加熱では h_liq 上)。
+#   ・自然対流 (flatcc_natural_convection):
+#       液   = 曲面の濡れ R θ_liq dl (B) + 両端面の円弓形 R²(θ_liq − sin θ_liq) (A)。平面側は液に接しない (床の面は無い)。
+#       蒸気 = 曲面の残り R (π − θ_liq) dl (B) + 両端面の残り (A) [どちらも従来の Nu_cc_smooth、L = D_i]
+#            + 平面側 A_flat (A)。平面側は「加熱面が下向き」の水平平板 Nu = 0.52 Ra^(1/5) (Nu_plate_down_smooth、L = A/P)。
+#       平面側は、蒸気が少しでもあれば蒸気に接するとする (f_v は [δ, 1−δ] にクランプ済み)。
+#   ・壁面凝縮: 曲面の蒸気側 (B、A_vap) に加えて、平面側 A_flat (節点 A) でも凝縮する。駆動する温度差の比 g_T は面ごとに
+#     その節点の温度で計算する (平面: T_A、曲面: T_B)。平面の潜熱は節点 A へ入る (曲面の分は従来どおり B へ)。
+#     平面が蒸気より熱くなれば g_T = 0 で凝縮は止まる (起動直後の圧縮の間は、平面は蒸気より 0.3〜0.5 K 冷たい)。
+#   ・噴流の流入口の高さ (cc_mix_z_port) は、従来どおり平面 (secondary wick の内面) から測った値を与える。
+#     上面加熱では、底 (曲面の最下部) からの高さ R − z_port に換算して使う。
+#   ・secondary wick の液の流れは、CC の底 (曲面) → 節点 B → 節点 A → primary wick の順に通る
+#     (residual_swick2! の via_B。下面加熱では従来どおり CC → A → primary wick)。
 # =============================================================================
 
 # -----------------------------------------------------------------------------
@@ -95,9 +113,13 @@ S_total は、曲面 + 両端面 + 平面側の全面積。K_liq は液の体積
 """
 function flatcc_params(geo::FlatCCGeometry; K_liq = NaN, M_mol = NaN)
     geo.N == 1 || error("CCは N=1 (貯水池) のみ対応しています。geo.cc.N=$(geo.N)")
+    geo.orientation in (:heat_bottom, :heat_top) ||
+        error("FlatCCGeometry.orientation は :heat_bottom か :heat_top です (orientation = $(geo.orientation))")
     return merge(pipe_params(geo),
                  (R = geo.R, A_flat = geo.D_i * geo.dl, S_total = geo.S_inner + geo.D_i * geo.dl,
-                  K_liq = K_liq, M_mol = M_mol))
+                  K_liq = K_liq, M_mol = M_mol,
+                  orientation = geo.orientation,
+                  L_flat = geo.D_i * geo.dl / (2 * (geo.D_i + geo.dl))))   # 平面側の代表長さ A/P (上面加熱の Nu_plate_down でのみ使う)
 end
 
 """
@@ -149,16 +171,18 @@ end
 """
     cc_layer_geometry(X, p) -> NamedTuple
 
-液の層の幾何。f_v = X/V から cc_vapor_geometry で液深さ h_liq を出し、層の厚さ dz_k = f_k h_liq、断面積 A_slab = V_L,nom/h_liq (一様)。
-A_if は気液界面の面積 (弦の幅 × 長さ)。
+液の層の幾何。f_v = X/V から flatcc_phase_geometry (姿勢で切り替え) で液深さ h_liq を出し、層の厚さ dz_k = f_k h_liq、
+断面積 A_slab = V_L,nom/h_liq (一様)。A_if は気液界面の面積 (弦の幅 × 長さ)。弦は平面 (円の中心) から d_if の位置
+(下面加熱: d_if = h_liq、上面加熱: d_if = h_vap)。
 """
 function cc_layer_geometry(X, p)
-    geom  = cc_vapor_geometry(X / p.V, p.R, p.dl)
+    geom  = flatcc_phase_geometry(X / p.V, p.R, p.dl, p.orientation)
     h_liq = geom.h_liq
     V_nom = p.V - X
+    d_if  = p.orientation === :heat_top ? geom.h_vap : h_liq
     return (geom = geom, h_liq = h_liq, V_nom = V_nom, A_slab = V_nom / h_liq,
             dz = CC_LAYER_FRAC .* h_liq,
-            A_if = 2 * sqrt(max(p.R^2 - h_liq^2, 1.0e-8)) * p.dl)
+            A_if = 2 * sqrt(max(p.R^2 - d_if^2, 1.0e-8)) * p.dl)
 end
 
 """
@@ -218,7 +242,7 @@ end
 (σ の式 (99) の指数の分母は、σ が 0〜1 になる 2 (v_v/v_l)^(1/3) − 1 を採用。アンモニア 20 °C で σ ≈ 0.69。)
 気相が尽きるとき (mv → 0) は、凝縮を mv/(mv + m_ε) で抑える (蒸発は抑えない)。
 """
-function cc_condensation(P, T1, X, mv, p, tables::FluidTables; swp = nothing, T_sw = NaN, Tbar = NaN)
+function cc_condensation(P, T1, X, mv, p, tables::FluidTables; swp = nothing, T_sw = NaN, Tbar = NaN, T_swA = NaN)
     T_v = Tsat(P, tables)
     sp  = sat_props(T_v, tables)
     v_l = 1 / sp.ρ_l
@@ -240,9 +264,14 @@ function cc_condensation(P, T1, X, mv, p, tables::FluidTables; swp = nothing, T_
     # T_sw, Tbar が与えられたとき (NaN でないとき) は、駆動する温度差の比 g_T = (T_v − T_sw)/(T_v − Tbar) をかける
     # (T_sw = secondary wick の温度、Tbar = 液の体積平均温度 = それぞれの遠方の温度)。半無限体の熱流束 e (T_v − T_遠方)/√(πt) の、温度差の部分。
     # 分母の下限 0.05 K (起動前で T_v ≈ Tbar のとき。このとき ṁ_raw ≈ 0 なので影響しない)、上限 g_max = 2 は数値の安全のためで、通常は効かない。
+    # 上面加熱 (p.orientation = :heat_top) では、平面側 A_flat (節点 A、温度 T_swA) も蒸気に接するので、同じ式で平面の分 ṁ_wA を足す
+    # (g_T は平面の温度 T_swA で計算)。下面加熱では平面は液に浸かっているので ṁ_wA = 0 (従来と同じ)。
     g_T = 1.0
     r_w = 0.0
     ṁ_w = 0.0
+    g_TA = 0.0
+    r_wA = 0.0
+    ṁ_wA = 0.0
     if swp !== nothing
         e_l = sqrt(sp.k_l * sp.ρ_l * sp.cp_l)
         e_w = sqrt(swp.k_eff * ((1 - swp.por) * swp.ρ_w * swp.C_w + swp.por * sp.ρ_l * sp.cp_l))
@@ -252,9 +281,20 @@ function cc_condensation(P, T1, X, mv, p, tables::FluidTables; swp = nothing, T_
             g_T = soft_clamp((T_v - T_sw) / den, 0.0, 2.0, 0.02)
         end
         ṁ_w = r_w * g_T * ṁ_raw * w * s_v
+        if p.orientation === :heat_top
+            r_wA = e_w * p.A_flat / (e_l * A_if)
+            g_TA = 1.0
+            if !isnan(T_swA) && !isnan(Tbar)
+                denA = soft_clamp(T_v - Tbar, 0.05, 10.0, 0.01)
+                g_TA = soft_clamp((T_v - T_swA) / denA, 0.0, 2.0, 0.02)
+            end
+            ṁ_wA = r_wA * g_TA * ṁ_raw * w * s_v
+        end
     end
+    # ṁ_w, Q_w は壁面全体 (曲面 B + 平面 A)。Q_wB は節点 B へ、Q_wA は節点 A へ入る潜熱
     return (ṁ = ṁ_raw * (w * s_v + (1 - w)), ṁ_raw = ṁ_raw, h_i = h_i, λ = λ, T_v = T_v, A_if = A_if, σ = σa,
-            ṁ_w = ṁ_w, r_w = r_w, g_T = g_T, Q_w = ṁ_w * λ)
+            ṁ_w = ṁ_w + ṁ_wA, r_w = r_w, g_T = g_T, Q_w = (ṁ_w + ṁ_wA) * λ,
+            Q_wB = ṁ_w * λ, Q_wA = ṁ_wA * λ, r_wA = r_wA, g_TA = g_TA)
 end
 
 # -----------------------------------------------------------------------------
@@ -273,9 +313,14 @@ secondary wick の 2 節点 (A: 平面側 + 両端面、温度 T_A。B: 半円�
     Q_A, Q_B  … 節点 A、B が流体へ渡す熱 (swick の残差で、それぞれの節点から引く。Q_A + Q_B = Q_fluid)
     geom, Ra_l, Ra_v, h_l (液の面積平均), h_v, w_on
 
-面積: 蒸気 = 曲面の R θ_vap dl (B) + 両端面の円冠 R²(θ_vap − sin θ_vap) (A)。
+面積 (下面加熱 :heat_bottom):
+      蒸気 = 曲面の R θ_vap dl (B) + 両端面の円冠 R²(θ_vap − sin θ_vap) (A)。
       液   = 曲面の濡れ R (π − θ_vap) dl (B) + 両端面の濡れ π R² − 円冠 (A) + 平面側 A_flat (A)。
-液の面積は、平面側 A_flat を最下層に、残りを層の体積の割合 f_k で各層に配る。各層の ΔT = T_節点 − T_k、物性は層の平均温度の飽和液。
+面積 (上面加熱 :heat_top):
+      液   = 曲面の濡れ R θ_liq dl (B) + 両端面の円弓形 R²(θ_liq − sin θ_liq) (A)。
+      蒸気 = 曲面の残り R (π − θ_liq) dl (B) + 両端面の残り π R² − 円弓形 (A) + 平面側 A_flat (A、Nu_plate_down_smooth)。
+液の面積は、平面側 A_flat (液に接するとき) を最下層に、残りを層の体積の割合 f_k で各層に配る。各層の ΔT = T_節点 − T_k、物性は層の平均温度の飽和液。
+戻り値の Ra_flat, h_flat は、上面加熱の平面側 → 蒸気の Ra と h (下面加熱では NaN)。
 """
 function flatcc_natural_convection(ccl, P, T_A, T_B, p, g, tables::FluidTables; δ_T=1e-3,
     boiling=false, r_c=5.0e-6, ε_onset=0.1)
@@ -283,14 +328,29 @@ function flatcc_natural_convection(ccl, P, T_A, T_B, p, g, tables::FluidTables; 
     f = CC_LAYER_FRAC
     Tl = ccl.Tl
     T_v = Tsat(P, tables)
-    geom = cc_vapor_geometry(ccl.X[1] / p.V, p.R, p.dl)
-    θ = geom.θ_vap
-    A_vap_c = p.R * θ * p.dl                       # 曲面の蒸気側 (B)
-    A_vap_e = p.R^2 * (θ - sin(θ))                 # 両端面の円冠 (A)
-    A_vap = A_vap_c + A_vap_e
-    A_liq = p.S_total - A_vap
-    A_cw = p.R * (π - θ) * p.dl                    # 曲面の濡れ (B)
-    A_ew = A_liq - p.A_flat - A_cw                 # 両端面の濡れ (A)
+    top = p.orientation === :heat_top
+    if !top
+        # 下面加熱 (従来): 蒸気は曲面の最上部の円冠、平面側は液 (最下層の床)
+        geom = cc_vapor_geometry(ccl.X[1] / p.V, p.R, p.dl)
+        θ = geom.θ_vap
+        A_vap_c = p.R * θ * p.dl                       # 曲面の蒸気側 (B)
+        A_vap_e = p.R^2 * (θ - sin(θ))                 # 両端面の円冠 (A)
+        A_vap = A_vap_c + A_vap_e
+        A_liq = p.S_total - A_vap
+        A_cw = p.R * (π - θ) * p.dl                    # 曲面の濡れ (B)
+        A_ew = A_liq - p.A_flat - A_cw                 # 両端面の濡れ (A)
+        A_fl = p.A_flat                                # 液に接する平面側 (A、最下層)
+    else
+        # 上面加熱: 液は曲面の底の円弓形、平面側は蒸気 (加熱面が下向き)
+        geom = cc_bottom_liquid_geometry(ccl.X[1] / p.V, p.R, p.dl)
+        θ = geom.θ_liq
+        A_cw = p.R * θ * p.dl                          # 曲面の濡れ (B)
+        A_ew = p.R^2 * (θ - sin(θ))                    # 両端面の円弓形 (A)
+        A_liq = A_cw + A_ew
+        A_vap_c = p.R * (π - θ) * p.dl                 # 曲面の蒸気側 (B)
+        A_vap_e = π * p.R^2 - A_ew                     # 両端面の残り (A)
+        A_fl = 0.0                                     # 平面側は液に接しない (蒸気側で扱う)
+    end
     L = p.D
 
     Tm = sum(f .* Tl)
@@ -325,14 +385,14 @@ function flatcc_natural_convection(ccl, P, T_A, T_B, p, g, tables::FluidTables; 
         Ra_B = g * sp.β_l * soft_abs(ΔT_B, δ_T) * L^3 / (ν_l * α_l)
         h_A = (1 - wA) * Nu_cc_smooth(Ra_A) * sp.k_l / L + wA * hcA
         h_B = (1 - wB) * Nu_cc_smooth(Ra_B) * sp.k_l / L + wB * hcB
-        A_Ak = A_ew * f[k] + (k == N ? p.A_flat : 0.0)
+        A_Ak = A_ew * f[k] + (k == N ? A_fl : 0.0)
         A_Bk = A_cw * f[k]
         QA_k = h_A * A_Ak * ΔT_A
         QB_k = h_B * A_Bk * ΔT_B
         Ql[k] = QA_k + QB_k
         aAe[k] = h_A * A_ew * f[k]
         aBc[k] = h_B * A_cw * f[k]
-        k == N && (aAf = h_A * p.A_flat)
+        k == N && (aAf = h_A * A_fl)
         Q_Al += QA_k
         Q_Bl += QB_k
         hA += h_A * A_Ak + h_B * A_Bk
@@ -349,11 +409,20 @@ function flatcc_natural_convection(ccl, P, T_A, T_B, p, g, tables::FluidTables; 
     h_vB, Ra_vB = h_vap(T_B)
     Q_vA = h_vA * A_vap_e * (T_A - T_v)
     Q_vB = h_vB * A_vap_c * (T_B - T_v)
+    Ra_flat = NaN
+    h_flat = NaN
+    if top
+        # 平面側 (節点 A) → 蒸気: 加熱面が下向きの水平平板 (Nu = 0.52 Ra^(1/5)、代表長さ L_flat = A/P)
+        Ra_flat = g * sv.β_v * soft_abs(T_A - T_v, δ_T) * p.L_flat^3 / (ν_v * α_v)
+        h_flat = Nu_plate_down_smooth(Ra_flat) * sv.k_v / p.L_flat
+        Q_vA += h_flat * p.A_flat * (T_A - T_v)
+    end
     Q_l = Q_Al + Q_Bl
     Q_v = Q_vA + Q_vB
 
     return (Ql = Ql, aAe = aAe, aBc = aBc, aAf = aAf, Q_l = Q_l, Q_v = Q_v, Q_fluid = Q_l + Q_v, Q_A = Q_Al + Q_vA, Q_B = Q_Bl + Q_vB, geom = geom,
-            Ra_l = Ra_sum, Ra_v = Ra_vB, h_l = hA / A_liq, h_v = h_vB, w_on = 0.5 * (wA + wB))
+            Ra_l = Ra_sum, Ra_v = Ra_vB, h_l = hA / A_liq, h_v = h_vB, w_on = 0.5 * (wA + wB),
+            Ra_flat = Ra_flat, h_flat = h_flat)
 end
 
 # -----------------------------------------------------------------------------
@@ -480,8 +549,10 @@ function cc_mixing(Tl, X, P, inlet, φ_N, nc, T_A, T_B, p, g, tables::FluidTable
         geo = cc_layer_geometry(X, p)
         # 流入口 (中心の高さ z_port、幅 D) が各層に重なる割合 v (床から数える)。液面より上の分は層 1
         v = zeros(N)
-        zl = c.cc_mix_z_port - D / 2
-        zh = c.cc_mix_z_port + D / 2
+        # cc_mix_z_port は平面 (secondary wick の内面) からの高さ。上面加熱では底 (曲面の最下部) からの高さ R − z_port に換算する
+        z_c = p.orientation === :heat_top ? p.R - c.cc_mix_z_port : c.cc_mix_z_port
+        zl = z_c - D / 2
+        zh = z_c + D / 2
         zb = 0.0
         for k in N:-1:1
             zt = zb + geo.dz[k]
@@ -544,7 +615,7 @@ CC の液相 (各層の温度 Tl、名目の空き容積 X) と気相の質量 m
 戻り値: ṁ_cond (凝縮が正)、cd (cc_condensation の戻り値)、F (層の間の質量流量 [kg/s]。F[k] = 層 k+1 → 層 k の上向き、F[N] = ṁ_in − ṁ_out)。
 残差は du について線形 (流れの向きの判定には du を含まない近似の Ftil を使う)。
 """
-function residual_ccl!(r, d, x, P, inlet, ṁ_out, nc, Q_extra, p, g, tables::FluidTables; swp = nothing, T_sw = NaN, mix = nothing)
+function residual_ccl!(r, d, x, P, inlet, ṁ_out, nc, Q_extra, p, g, tables::FluidTables; swp = nothing, T_sw = NaN, T_swA = NaN, mix = nothing)
     N = N_CC_LAYER
     f = CC_LAYER_FRAC
     Tl = x.Tl
@@ -560,7 +631,7 @@ function residual_ccl!(r, d, x, P, inlet, ṁ_out, nc, Q_extra, p, g, tables::Fl
     dρbdt = sum(f .* dρdT .* d.Tl)
 
     # --- 界面の凝縮と、液・気相の質量 ---
-    cd = cc_condensation(P, Tl[1], X, mv, p, tables; swp = swp, T_sw = T_sw, Tbar = sum(f .* Tl))
+    cd = cc_condensation(P, Tl[1], X, mv, p, tables; swp = swp, T_sw = T_sw, Tbar = sum(f .* Tl), T_swA = T_swA)
     ṁ_cond = cd.ṁ                        # 液面での凝縮 (潜熱は層 1 へ)
     ṁ_tot  = cd.ṁ + cd.ṁ_w               # 気相の質量の減少 = 液面 + 壁面 (壁面の凝縮水は液面 (層 1) へ流れ落ちる。潜熱は壁 = secondary wick へ)
     Δṁ = inlet.ṁ - ṁ_out                 # 最下層への正味の流入
@@ -618,7 +689,7 @@ function residual_ccl!(r, d, x, P, inlet, ṁ_out, nc, Q_extra, p, g, tables::Fl
         end
         r.Tl[k] = f[k] * V_nom * ρs[k] * cps[k] * d.Tl[k] - (adv + cnd + Q)
     end
-    return (ṁ_cond = ṁ_cond, cd = cd, F = F, Q_wall = cd.Q_w)
+    return (ṁ_cond = ṁ_cond, cd = cd, F = F, Q_wall = cd.Q_w, Q_wall_A = cd.Q_wA, Q_wall_B = cd.Q_wB)
 end
 
 """
@@ -684,10 +755,12 @@ function cc_state_diag(c, p, tables::FluidTables)
     X  = c.ccl.X[1]
     mv = c.ccl.mv[1]
     cd = cc_condensation(P, Tl[1], X, mv, pc, tables; swp = (p.cond.cc_wall_cond ? p.swick_p : nothing),
-                         T_sw = (p.cond.cc_wall_dT ? c.swick.T[2] : NaN), Tbar = sum(CC_LAYER_FRAC .* Tl))
+                         T_sw = (p.cond.cc_wall_dT ? c.swick.T[2] : NaN), Tbar = sum(CC_LAYER_FRAC .* Tl),
+                         T_swA = (p.cond.cc_wall_dT ? c.swick.T[1] : NaN))
     geo = cc_layer_geometry(X, pc)
     cl = cc_closure(P, Tl, X, pc, tables)
     return (P = P, T_v = cd.T_v, T1 = Tl[1], TN = Tl[end], f_v = cl.V_v / pc.V, mv = mv,
             dP_ne = P - tables.Psat_T(Tl[1]), ṁ_cond = cd.ṁ, h_i = cd.h_i, A_if = cd.A_if, h_liq = geo.h_liq,
-            λ = cd.λ, σ = cd.σ, ṁ_w = cd.ṁ_w, Q_wall = cd.Q_w, r_w = cd.r_w, g_T = cd.g_T)
+            λ = cd.λ, σ = cd.σ, ṁ_w = cd.ṁ_w, Q_wall = cd.Q_w, r_w = cd.r_w, g_T = cd.g_T,
+            Q_wall_A = cd.Q_wA, g_TA = cd.g_TA)
 end

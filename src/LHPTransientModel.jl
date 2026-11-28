@@ -16,6 +16,7 @@ export FlatLHPGeometry, FlatWickGeometry, SecondaryWickGeometry, FlatGrvGeometry
 export LHPTransientCondition
 export init_fluid_lookups, FluidTables
 export solve_transient_lhp!, components_at, applied_heat
+export capillary_margin
 export energy_balance, energy_partition, stored_energy_parts, ll_end_budget, cc_interface_diag, loop_heat_diag, h_failure_diag, failure_state_diag, failure_residual_diag, failure_autopsy, ll_thermal_diag, startup_onset_diag
 export measured_initial, total_charge, pchip_interp
 export solve_steady_lhp!, save_steady_state, load_steady_state

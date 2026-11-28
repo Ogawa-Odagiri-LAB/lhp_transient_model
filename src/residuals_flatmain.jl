@@ -238,9 +238,11 @@ function f_dae_residual!(res, du, u, p::FlatLHPParams, t)
     # 孔内の液の熱膨張 (pore_expansion = true): 昇温すると孔内の液の密度が下がり、体積一定の孔から液が押し出されて CC の液へ戻る。
     # CC から wick へ出る質量流量 = 蒸発 ṁ + 孔内の液の質量の変化 (dm_pore < 0 なら CC へ戻る)。エネルギーの式の ρ_l_ref は一定のまま (近似)
     dm_pore = c.pore_expansion ? pore_liquid_mass_rate(d.wick, x.wick, d.swick, x.swick, p.wick_p, p.swick_p, tables; ρ_l_ref = p.ρ_l_ref) : 0.0
-    ccr = residual_ccl!(r.ccl, d.ccl, x.ccl, P_cc, inlet, iface.ṁ + dm_pore, nc, c.Q_cc_fluid, p.p_cc, g, tables; swp = swp_cc, T_sw = (c.cc_wall_dT ? T_swB : NaN), mix = mix)
+    ccr = residual_ccl!(r.ccl, d.ccl, x.ccl, P_cc, inlet, iface.ṁ + dm_pore, nc, c.Q_cc_fluid, p.p_cc, g, tables; swp = swp_cc, T_sw = (c.cc_wall_dT ? T_swB : NaN),
+                        T_swA = (c.cc_wall_dT ? T_sw : NaN), mix = mix)   # T_swA: 上面加熱の平面側 (節点 A) の壁面凝縮の g_T 用
     residual_swick2!(r.swick, d.swick, x.swick, p.swick_p, iface.ṁ, T_cc_liq, x.wick.T[1], P_cc_liq,
-                     qcs.Q_A, qcs.Q_B, nc.Q_A, nc.Q_B, ccr.Q_wall, Q_leak, tables; ρ_l_ref = p.ρ_l_ref)
+                     qcs.Q_A, qcs.Q_B, nc.Q_A, nc.Q_B, ccr.Q_wall_B, Q_leak, tables; ρ_l_ref = p.ρ_l_ref,
+                     via_B = p.p_cc.orientation === :heat_top, Q_wall_A = ccr.Q_wall_A)   # 壁面凝縮の潜熱: 曲面の分は B、平面の分 (上面加熱のみ) は A    # 上面加熱: 液は CC の底 (曲面 B) → A → primary wick の順に通る
 
     # CC (気相 1 セル + 液 16 層): 入口 = 液管 (最下層へ直接)、出口 = 最下層から secondary wick へ ṁ。
     # ΔP_ne は状態ではなく、気相の圧力 P と界面の液温 Tl[1] の飽和圧の差として結果に出る (界面の凝縮 (97)〜(99) 式)

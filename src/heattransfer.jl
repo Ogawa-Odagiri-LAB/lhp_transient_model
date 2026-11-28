@@ -239,6 +239,19 @@ function Nu_cc_smooth(Ra; n1=6, n2=6)
     return blend_power(step1, Nu_turb, n2)
 end
 
+"""
+    Nu_plate_down_smooth(Ra; n=6)
+
+加熱面が下向きの水平平板の自然対流Nu (Nu_plate_down = 0.52 Ra^(1/5)) に、伝導の下限 Nu = 1
+(Nu_cc_conduction) をべき乗ブレンドしたもの。Nu_cc_smooth と同じく、Ra→0 で Nu→0 になって熱の経路が
+消えるのを防ぐための数値的な下限 (2 つの式の交点は Ra = (1/0.52)^5 ≈ 26 で、相関式の適用範囲
+Ra ≳ 10^4 ではブレンドの影響は無視できる)。
+"""
+function Nu_plate_down_smooth(Ra; n=6)
+    Ra_safe = soft_floor(Ra, 1.0)
+    return blend_power(Nu_cc_conduction(), Nu_plate_down(Ra_safe), n)
+end
+
 # -----------------------------------------------------------------------------
 # 3.6 グルーブ過熱・周囲環境 (式66-67)
 # -----------------------------------------------------------------------------

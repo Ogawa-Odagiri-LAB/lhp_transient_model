@@ -15,6 +15,10 @@ plate_nx_run = (isdefined(Main, :SWEEP) && hasproperty(Main.SWEEP, :plate_nx)) ?
 plate_ny_run = (isdefined(Main, :SWEEP) && hasproperty(Main.SWEEP, :plate_ny)) ? Int(Main.SWEEP.plate_ny) : 6
 # 凝縮器の管の分割数 (既定 50 = 11.2 mm/セル)。cond_N_sweep.jl が SWEEP に cond_N を入れたときだけ置き換える (数値解像度の確認用)。チラー側 (ColdPlateGeometry の N) は変えない
 cond_N_run = (isdefined(Main, :SWEEP) && hasproperty(Main.SWEEP, :cond_N)) ? Int(Main.SWEEP.cond_N) : 50
+# 姿勢: :heat_bottom = 下面加熱 (従来、蒸発器が下)、:heat_top = 上面加熱 (上下反転。CC の平面側が上、曲面が下)。
+# 反転するのは蒸発器・CC だけで、配管・凝縮器は水平のまま。SWEEP に orientation を入れたときはそちらが優先
+orientation_default = :heat_top   # 【単独実行の姿勢】 :heat_bottom / :heat_top。ここを書き換える
+orientation_run = (isdefined(Main, :SWEEP) && hasproperty(Main.SWEEP, :orientation)) ? Main.SWEEP.orientation : orientation_default
 
 # --- 幾何 (実機) ---
 # primary wick φ=0.30、secondary wick φ_s=0.70 (どちらも液で満たされている)。
@@ -25,7 +29,7 @@ geo = FlatLHPGeometry(
     TLGeometry(N=20, L=1.17, D_i=0.00176, D_o=0.00318),                   # 蒸気管
     CondGeometry(N=cond_N_run, L=0.56, D_i=0.00176, D_o=0.00318),                 # 凝縮器
     TLGeometry(N=20, L=1.15, D_i=0.00099, D_o=0.00159),                   # 液管
-    FlatCCGeometry(N=1),                                                  # CC (半円筒 D_i=27 mm, L=25 mm)
+    FlatCCGeometry(N=1, orientation=orientation_run),                     # CC (半円筒 D_i=27 mm, L=25 mm)。姿勢は orientation_run
     # 凝縮器プレート 300 × 60 mm、厚さ 5 mm (A5052。コールドプレートも同寸で全面接触)。管は短辺から入り、折り返し 1 回 (管の間隔 30 mm、曲げ半径 15 mm) で戻る。格子は 10 mm 角
     CondPlateGeometry(L=0.300, W=0.060, t=0.005, nx=plate_nx_run, ny=plate_ny_run, pitch=0.030),
     # コールドプレート (A5052、同じ平面寸法・格子、厚さ 10 mm)。チラー配管 (1/8 in = 外径 3.175 mm、エチレングリコール) は LHP の管と反対側の短辺から入り、凝縮器と同じ経路 (間隔 30 mm、長さ 0.56 m) で折り返す (対向流)
@@ -65,6 +69,7 @@ Q_cc_fluid_run = 0.0   # 【診断用】CC の流体への一定の熱 [W]。0 =
 G_br_run = 0.01   # 熱橋のコンダクタンス [W/K]。承認済み (0.01)。実験の LL1→LL3 の昇温 (+1.33 K @90 s) に対してモデル +1.20 K。0.05 では +1.97 K で過大。別の値を試すときは結果のフォルダ名に _Gbr<値> が付く
 gate_case = :P   # :P = 受熱面 P で判定 + r_c_wick 1.5 µm (v5 と同じ。v6a)、:wick = ウィック最外セルで判定 + r_c_wick 5.1 µm (v5b と同じ。v6b)。2 つ同時に走らせるときは、このファイルをコピーして gate_case だけ変える
 run_tag = sweep !== nothing ? (hasproperty(sweep, :tag) ? string(sweep.tag) : "_tau" * string(sweep.τ_nuc)) : (gate_case === :wick ? "_v9b" : "_v9a") * "_hcon_geo2_foot_pore" * (LHPTransientModel.CC_LUMPED ? "_lump" : "")   # 結果フォルダ名の接尾辞 (前の計算を上書きしないため)。v9a/b = v8e/f + secondary wick を 2 節点 (A: 平面側 + 両端面、B: 半円環 = 蒸気が凝縮する壁。swick の状態が 2 要素になるので :pre の再実行が必要)。v8e/f = v8c/d + 壁面凝縮の温度差の比 g_T (cc_wall_dT)。v8c/d = v8a/b + 壁面凝縮 (cc_wall_cond = true)。v8a/b = v7 の CC を 気相 1 セル + 液 16 層 (ccl。界面で凝縮 ΔP_ne>0、液管は最下層に流入、壁面凝縮なし) に置き換えた版。v7 = v6 + 熱の流れを P → S → CC ケース (側面 S が断熱材と CC ケースに熱を出す) + 壁面凝縮 (cc_wall_cond。w_v と f_v_ref_ne の代わりに、液面と secondary wick 壁面の熱浸透率 × 面積の比。壁面に入る熱は swick へ)。v6 =v5 / v5b + C_hb を 45 → 47.2 J/K (A5052 ブロック − 取付穴 + ヒーター + ねじ)。v5b =v5 + 開始の判定の温度を primary wick の最外セルにし (onset_ref = :wick)、r_c_wick を実測の 5.1 µm に戻した版。v5 =v4b + 蒸発器ケースの 2 節点 (P 6.28・S 3.48 J/K、G_ps 0.93 W/K、C_ec_extra 廃止、EC のセンサは S、ゲートは P) + r_c_wick 1.5 µm。v4b =v4a + ヒーター立ち上がりの区切り点を 0.1 s 刻みに (types.jl)。v4a = v3 から f_v_ref_ne を 0.2 に戻した版 (v3 = r_c_wick 5.1 µm、f_l_grv_init = 0、h_con 9000 (f_con_area 1.0)、h_chiller = h_con) + CC ケース 2 節点 (cc_2node)、f_ec_cc = 1.0、C_ec_extra = 18、Q_cc_fluid = 0
+orientation_run === :heat_top && (run_tag *= "_heattop")   # 上面加熱の結果は別のフォルダに保存する (下面加熱の結果を上書きしない)
 result_name = (stage === :long2h ? "transient_flat_ammonia_2h" : "transient_flat_ammonia") * (G_br_run == 0.01 ? "" : "_Gbr" * string(G_br_run)) * run_tag
 result_dir = isabspath(result_name) ? result_name : joinpath(@__DIR__, "..", "res", result_name)
 #   :long2h … :long と同じ初期状態から 6910 s まで (加熱開始 +6900 s。実験は exp_5W_2h.csv = 2 時間の実測 (加熱開始 +6896 s まで)。計算に 4 時間ほどかかる)。
@@ -267,6 +272,14 @@ try
     save_results(sol, p, tables, result_dir)
 catch err
     @warn "結果の保存に失敗 (CSV を開いたままでは?)。表の出力は続けます" err
+end
+
+# 毛細管圧の余裕 (満液の仮定が保たれているか。上面加熱では液を持ち上げる静水頭が加わる)。capillary_margin.csv に保存 (診断のみ)
+try
+    cap = capillary_margin(sol, p)
+    LHPTransientModel.CSV.write(joinpath(result_dir, "capillary_margin.csv"), cap)
+catch err
+    @warn "毛細管圧の余裕の計算・保存に失敗" err
 end
 
 # ループの熱収支と凝縮器の二相長を budget.csv に保存 (診断のみ。plot_heat_budget.jl が読む)

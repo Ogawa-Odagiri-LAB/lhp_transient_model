@@ -68,7 +68,7 @@ function results_summary(sol, p::AbstractLHPParams, tables::FluidTables)
                    h_cc = Float64[], w_on_cc = Float64[], Q_cc = Float64[], x_cc = Float64[], u_ll_end = Float64[], T_hb = Float64[],
                    Q_hb_ec = Float64[], Q_ec_vl = Float64[], Q_ec_cc = Float64[], Q_ec_wick = Float64[], Q_br = Float64[], n_nuc = Float64[], dP_ne = Float64[],
                    Q_hi_hb = Float64[], Q_hi_ev = Float64[], Q_hi_cc = Float64[], Q_peek = Float64[],
-                   Q_wall = Float64[], Q_cs = Float64[], Q_leak = Float64[], T_sw = Float64[], T_swB = Float64[],
+                   Q_wall = Float64[], Q_wall_A = Float64[], Q_cs = Float64[], Q_leak = Float64[], T_sw = Float64[], T_swB = Float64[],
                    T_l1 = Float64[], T_lN = Float64[], f_v_cc = Float64[], m_v_cc = Float64[], mdot_cond = Float64[], h_i = Float64[], h_ev = Float64[],
                    # --- CC まわりの熱経路 (診断。物理は変えない)。符号は各列の説明の向き ---
                    m_pore = Float64[], Q_foot = Float64[], T_ecS = Float64[], T_ccA = Float64[], T_ccB = Float64[], T_llend = Float64[], T_llfl = Float64[],
@@ -132,7 +132,8 @@ function results_summary(sol, p::AbstractLHPParams, tables::FluidTables)
         Q_br_k = flat ? sum(thermal_bridge_ll(p.cond, p.cond.br_src === :hb ? c.T_wall.hb[1] : T_ec_k, c.T_wall.ll)) : NaN
         # secondary wick の熱収支の診断 (平板型): 壁面凝縮で swick に入る熱 Q_wall、CC ケース → swick の Q_cs、primary wick → swick の Q_leak
         swk = flat && hasproperty(c, :swick)
-        Q_wall_k = swk ? (newcc ? ccd.Q_wall : 0.0) : NaN    # 壁面凝縮の潜熱 (cc_wall_cond = false なら 0)
+        Q_wall_k = swk ? (newcc ? ccd.Q_wall : 0.0) : NaN    # 壁面凝縮の潜熱の合計 (cc_wall_cond = false なら 0)
+        Q_wall_A_k = swk ? (newcc ? ccd.Q_wall_A : 0.0) : NaN   # そのうち平面側 (節点 A) の分 (上面加熱のみ。下面加熱は 0)。残り Q_wall − Q_wall_A が曲面 (節点 B)
         Q_cs_k   = swk ? Q_case_swick2(c.T_wall.cc[1], c.swick.T[1], c.swick.T[2], p.swick_p).Q : NaN
         Q_leak_k = swk ? p.wick_p.G[1] * (c.wick.T[1] - c.swick.T[1]) : NaN
         # CC まわりの熱経路 (平板型・新 CC のみ。残差と同じ関数・同じ引数)
@@ -185,7 +186,7 @@ function results_summary(sol, p::AbstractLHPParams, tables::FluidTables)
                    Q_hi_ev = (:hi in keys(c) && p.cond.hi_on) ? hi_G_in(p.cond, p.cond.hi_A_ev) * (T_ec_k - c.hi.T[2]) : NaN,
                    Q_hi_cc = (:hi in keys(c) && p.cond.hi_on) ? (p.cond.cc_adiabatic ? 0.0 : hi_G_in(p.cond, p.cond.hi_A_cc) * (c.T_wall.cc[1] - c.hi.T[3])) : NaN,
                    Q_peek = (:hi in keys(c) && p.cond.peek_on) ? p.cond.peek_k * p.cond.peek_A / (peek_dz(p.cond)[1] / 2) * (c.T_wall.hb[1] - c.peek.T[1]) : NaN,
-                   Q_wall = Q_wall_k, Q_cs = Q_cs_k, Q_leak = Q_leak_k, T_sw = swk ? c.swick.T[1] : NaN, T_swB = swk ? c.swick.T[2] : NaN,
+                   Q_wall = Q_wall_k, Q_wall_A = Q_wall_A_k, Q_cs = Q_cs_k, Q_leak = Q_leak_k, T_sw = swk ? c.swick.T[1] : NaN, T_swB = swk ? c.swick.T[2] : NaN,
                    T_l1 = newcc ? ccd.T1 : NaN, T_lN = newcc ? ccd.TN : NaN, f_v_cc = newcc ? ccd.f_v : NaN,
                    m_v_cc = newcc ? ccd.mv : NaN, mdot_cond = newcc ? ccd.ṁ_cond : NaN, h_i = newcc ? ccd.h_i : NaN,
                    h_ev = h_ev_at(p.cond, sol.t[k]),
@@ -207,8 +208,9 @@ function results_summary(sol, p::AbstractLHPParams, tables::FluidTables)
     #   dT/dt は保存点の中心差分 (保存間隔が粗いと精度が落ちる)。
     #   bal_caseA : C_cc_extra dT_A/dt − (Q_ec_cc + Q_foot − Q_ab)                       (cc_2node のとき)
     #   bal_caseB : C_B dT_B/dt − (Q_ab + Q_cc_ll − Q_cs_A − Q_cs_B − Q_hi_cc)
-    #   bal_swA   : dE_A/dt − (Q_hflow + Q_cs_A − Q_nc_A + Q_leak + Q_AB_sw)
-    #   bal_swB   : dE_B/dt − (Q_cs_B − Q_nc_B + Q_wall − Q_AB_sw)
+    #   bal_swA   : dE_A/dt − (Q_hflow + Q_cs_A − Q_nc_A + Q_leak + Q_AB_sw + Q_wall_A)
+    #   bal_swB   : dE_B/dt − (Q_cs_B − Q_nc_B + (Q_wall − Q_wall_A) − Q_AB_sw)
+    #   (上面加熱では secondary wick の液の流れが B → A を通るので、Q_hflow (A を通る流れの式) との差が bal_swA, bal_swB に残る)
     #   bal_fluid : Q_nc_l + Q_nc_v − (Q_nc_A + Q_nc_B)  (CC 流体が受ける熱と swick が失う熱の一致。流体側の全収支は列 Q_nc_*, Q_l1, Q_ret から手で確認する)
     n = nrow(df)
     if n >= 3 && all(!isnan, df.T_ccB) && hasproperty(p, :cw)
@@ -222,8 +224,8 @@ function results_summary(sol, p::AbstractLHPParams, tables::FluidTables)
                                   (df.Q_ab[i] + df.Q_cc_ll[i] - df.Q_cs_A[i] - df.Q_cs_B[i] - df.Q_hi_cc[i])
             end
             if !isnan(df.E_swA[i])
-                df.bal_swA[i] = dTdt(df.E_swA, i) - (df.Q_hflow[i] + df.Q_cs_A[i] - df.Q_nc_A[i] + df.Q_leak[i] + df.Q_AB_sw[i])
-                df.bal_swB[i] = dTdt(df.E_swB, i) - (df.Q_cs_B[i] - df.Q_nc_B[i] + df.Q_wall[i] - df.Q_AB_sw[i])
+                df.bal_swA[i] = dTdt(df.E_swA, i) - (df.Q_hflow[i] + df.Q_cs_A[i] - df.Q_nc_A[i] + df.Q_leak[i] + df.Q_AB_sw[i] + df.Q_wall_A[i])
+                df.bal_swB[i] = dTdt(df.E_swB, i) - (df.Q_cs_B[i] - df.Q_nc_B[i] + (df.Q_wall[i] - df.Q_wall_A[i]) - df.Q_AB_sw[i])
             end
             df.bal_fluid[i] = df.Q_nc_l[i] + df.Q_nc_v[i] - (df.Q_nc_A[i] + df.Q_nc_B[i])
         end

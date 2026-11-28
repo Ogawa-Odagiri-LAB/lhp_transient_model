@@ -15,13 +15,19 @@
 #   julia --project plot/plot_startup_compare.jl RES_DIR EXP_CSV [出力.png]
 #
 # モデルのセンサ位置 (transient_flat.jl と同じ。管の全長に対する比 s):
-#   VL1/2/3 = 1/6, 1/2, 5/6 (蒸発器側から)、CON1..5 = 0, 0.25, 0.5, 0.75, 1 (入口から)、
+#   VL1/2/3 = 1/6, 1/2, 5/6 (蒸発器側から)、CON1 = 入口から 10 mm (0.010/L_COND)、CON2..5 = 0.25, 0.5, 0.75, 1 (入口から)、
 #   LL1/2/3 = 0.10/1.15, 0.65/1.15, 1.11/1.15 (凝縮器側から)。壁温度 (profiles.csv の T_wall) を、
 #   セル中心 (i−0.5)/N の間で線形補間して使う。HB・EC は集中容量の壁 (hb, evap)、RES は CC の壁 (cc)。
+#   凝縮器は、CON_OUTER = true なら管壁の熱抵抗を入れた外面温度 (profiles.csv の comp = "cond_out"、
+#   LHPTransientModel.cond_outer_wall_T。センサ CON が付く面)、false なら壁の節点 (comp = "cond") を使う。
 # =============================================================================
-
+using Pkg; Pkg.activate(".")
 using Plots, DataFrames, CSV, Statistics, CoolProp
 using DSP        # 圧力のローパスフィルタ (P_FILTER = true のとき)
+
+# CSV.jl の警告を抑えるオプションは、バージョンで名前が違う (0.10 系: silencewarnings、1.0 以降: on_error)。
+# どちらの環境でも動くよう、読み込まれた CSV.jl のバージョンで切り替える
+const CSV_QUIET = pkgversion(CSV) >= v"1.0.0" ? (on_error = :collect,) : (silencewarnings = true,)
 
 # ---------------------------- 設定 ----------------------------
 RES_DIR = joinpath(@__DIR__, "..", "res", "transient_flat_ammonia_v9a_hcon_geo2_foot_pore")
@@ -57,7 +63,10 @@ P_FILTER_ORDER = 4
 P_FILTER_DT = 2.0             # [s]
 # センサ位置 (管の全長に対する比)
 S_VL  = [1/6, 1/2, 5/6]
-S_CON = [0.0, 0.25, 0.5, 0.75, 1.0]
+L_COND = 0.56                 # 凝縮器の管の長さ [m] (transient_flat.jl の CondGeometry の L)
+S_CON = [0.010 / L_COND, 0.25, 0.5, 0.75, 1.0]   # CON1 = 入口から 10 mm (transient_flat.jl の con1_pos と同じ)
+# 凝縮器の温度: true なら管壁の熱抵抗を入れた外面温度 (comp = "cond_out")。結果に無ければ (古い結果など) 壁の節点 (comp = "cond") に戻す
+CON_OUTER = true
 S_LL  = [0.10 / 1.15, 0.65 / 1.15, 1.11 / 1.15]
 # --------------------------------------------------------------
 
@@ -77,7 +86,7 @@ df_p = CSV.read(joinpath(RES_DIR, "profiles.csv"), DataFrame, select = [:t, :com
 function load_exp(path)
     first_line = open(readline, path)
     delim = count(==('\t'), first_line) >= count(==(','), first_line) ? '\t' : ','
-    d = CSV.read(path, DataFrame; delim = delim, normalizenames = false, silencewarnings = true)
+    d = CSV.read(path, DataFrame; delim = delim, normalizenames = false, CSV_QUIET...)
     function norm_name(s)
         s = strip(String(s))
         s == "Heat Load" && return "Q"
@@ -130,7 +139,10 @@ function at_position(M, s)
 end
 
 t_vl, M_vl = wall_matrix(df_p, "vl")
-t_cd, M_cd = wall_matrix(df_p, "cond")
+cond_comp = (CON_OUTER && any(==("cond_out"), df_p.comp)) ? "cond_out" : "cond"
+CON_OUTER && cond_comp == "cond" && println("注意: profiles.csv に cond_out がありません。凝縮器は壁の節点 (cond) の温度を描きます")
+println("凝縮器のモデル温度: ", cond_comp == "cond_out" ? "外面 (管壁の熱抵抗を含む、cond_out)" : "壁の節点 (cond)")
+t_cd, M_cd = wall_matrix(df_p, cond_comp)
 t_ll, M_ll = wall_matrix(df_p, "ll")
 t_hb, M_hb = wall_matrix(df_p, "hb")
 t_ev, M_ev = wall_matrix(df_p, "evap")
@@ -181,7 +193,7 @@ for (k, name) in enumerate(("VL1", "VL2", "VL3"))
 end
 
 # 3) CON1-5
-p3 = base_plot("Condenser (CON1-5, wall temperature)", "T [°C]")
+p3 = base_plot(cond_comp == "cond_out" ? "Condenser (CON1-5, tube outer-wall temperature)" : "Condenser (CON1-5, wall temperature)", "T [°C]")
 for (k, name) in enumerate(("CON1", "CON2", "CON3", "CON4", "CON5"))
     addline!(p3, tm(df_e.t, shift_e), df_e[!, name]; color = cols[k], label = name * " exp", exp_style...)
     addline!(p3, tm(t_cd, shift_m), at_position(M_cd, S_CON[k]); color = cols[k], label = name * " model", mod_style...)

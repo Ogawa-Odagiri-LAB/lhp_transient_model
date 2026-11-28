@@ -657,3 +657,71 @@ function failure_residual_diag(sol, p::AbstractLHPParams; n_top::Int = 15)
     end
     return nothing
 end
+# =============================================================================
+# 毛細管圧の余裕 (平板型、事後の診断。物理は変えない)
+#
+# モデルは「primary wick と secondary wick は常に液で満たされている」と仮定していて、毛細管限界・ドライアウトは
+# 残差に入っていない。保存点ごとに、毛細管圧が必要な圧力差を上回っているかを事後に確認する。
+# 上面加熱 (orientation = :heat_top) では、液を CC の液面から primary wick の蒸発面まで、重力に逆らって持ち上げる。
+#
+# 【高さ】 CC の液面を基準 (0)、上向きを正。
+#   z_s    : secondary wick の、CC 内の蒸気に面する平面までの高さ
+#            :heat_top → h_vap (液面 → 平面)、 :heat_bottom → 0 (平面は液に浸かっている)
+#   z_evap : primary wick の蒸発面 (グルーブ側) までの高さ
+#            :heat_top →  h_vap + T_swick + H + height、 :heat_bottom → −(h_liq + T_swick + H + height) (重力が助ける)
+#   (T_swick: secondary wick 平面部の厚さ、H: primary wick の高さ、height: グルーブ (フィン) の高さ)
+# 【必要な圧力差】
+#   primary wick の蒸発面のメニスカス:   ΔP_req_p = (P_grv − P_cc) + ρ_l g z_evap
+#     (P_grv − P_cc はループ全体の圧力損失。ウィック内の流動損失はモデルに無いので含めない)
+#   secondary wick の蒸気側のメニスカス: ΔP_req_s = ρ_l g z_s
+# 【毛細管圧】 ΔP_cap = 2σ/r (接触角 0)。r に最大細孔半径を入れると保守側。margin = ΔP_cap − ΔP_req < 0 なら満液の仮定が破れる。
+# =============================================================================
+
+"""
+    capillary_margin(sol, p::FlatLHPParams; r_pore_p = 5.1e-6, r_pore_s = p.cond.r_c_cc, verbose = true) -> DataFrame
+
+保存点ごとの毛細管圧の余裕 (上の説明)。r_pore_p, r_pore_s は primary / secondary wick の細孔半径 [m]
+(既定: primary は実測の 5.1 µm、secondary は CC の核沸騰に使っている r_c_cc)。列:
+  t, f_v (CC の気相の体積分率), h_liq, h_vap, z_s, z_evap [m], dP_loop (= P_grv − P_cc),
+  dP_req_p, dP_cap_p, margin_p, dP_req_s, dP_cap_s, margin_s [Pa]
+"""
+function capillary_margin(sol, p::FlatLHPParams; r_pore_p = 5.1e-6, r_pore_s = p.cond.r_c_cc, verbose::Bool = true)
+    geo, tables, g = p.geo, p.tables, p.cond.g
+    top = p.p_cc.orientation === :heat_top
+    stack = geo.cc.T_swick + geo.wick.H + geo.grv.height
+    df = DataFrame(t = Float64[], f_v = Float64[], h_liq = Float64[], h_vap = Float64[], z_s = Float64[],
+                   z_evap = Float64[], dP_loop = Float64[], dP_req_p = Float64[], dP_cap_p = Float64[],
+                   margin_p = Float64[], dP_req_s = Float64[], dP_cap_s = Float64[], margin_s = Float64[])
+    for k in eachindex(sol.t)
+        c = components_at(sol, p, k)
+        P_cc = c.cc.P[1]
+        sp = sat_props(Tsat(P_cc, tables), tables)
+        lg = cc_layer_geometry(c.ccl.X[1], p.p_cc)
+        h_liq, h_vap = lg.geom.h_liq, lg.geom.h_vap
+        z_s    = top ? h_vap : 0.0
+        z_evap = top ? h_vap + stack : -(h_liq + stack)
+        dP_loop  = groove_pressure(c.grv) - P_cc
+        dP_req_p = dP_loop + sp.ρ_l * g * z_evap
+        dP_req_s = sp.ρ_l * g * z_s
+        dP_cap_p = 2 * sp.σ / r_pore_p
+        dP_cap_s = 2 * sp.σ / r_pore_s
+        push!(df, (t = sol.t[k], f_v = c.ccl.X[1] / p.p_cc.V, h_liq = h_liq, h_vap = h_vap, z_s = z_s,
+                   z_evap = z_evap, dP_loop = dP_loop, dP_req_p = dP_req_p, dP_cap_p = dP_cap_p,
+                   margin_p = dP_cap_p - dP_req_p, dP_req_s = dP_req_s, dP_cap_s = dP_cap_s,
+                   margin_s = dP_cap_s - dP_req_s))
+    end
+    if verbose
+        println("\n毛細管圧の余裕 (orientation = ", p.p_cc.orientation, "、r_pore: primary ", r_pore_p * 1e6,
+                " µm、secondary ", r_pore_s * 1e6, " µm):")
+        println("  primary wick  : 必要な圧力差の最大 ", round(maximum(df.dP_req_p), digits = 1), " Pa (うち重力 ",
+                round(df.dP_req_p[end] - df.dP_loop[end], digits = 1), " Pa、最終時刻)、毛細管圧 ≈ ",
+                round(df.dP_cap_p[end], digits = 0), " Pa、余裕の最小 ", round(minimum(df.margin_p), digits = 1), " Pa")
+        println("  secondary wick: 必要な圧力差の最大 ", round(maximum(df.dP_req_s), digits = 1), " Pa、毛細管圧 ≈ ",
+                round(df.dP_cap_s[end], digits = 0), " Pa、余裕の最小 ", round(minimum(df.margin_s), digits = 1), " Pa")
+        any(<(0), df.margin_p) && println("  ⚠ primary wick の余裕が負になる時刻があります (t = ",
+                                          df.t[findfirst(<(0), df.margin_p)], " s〜。満液の仮定が破れている)")
+        any(<(0), df.margin_s) && println("  ⚠ secondary wick の余裕が負になる時刻があります (t = ",
+                                          df.t[findfirst(<(0), df.margin_s)], " s〜。満液の仮定が破れている)")
+    end
+    return df
+end

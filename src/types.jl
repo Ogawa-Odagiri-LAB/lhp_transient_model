@@ -233,6 +233,10 @@ groove_length(geo::FlatGrvGeometry) = geo.L_grv
     V::Float64 = A_cross * dl
     θ::Float64 = 0.0                         # 傾斜角 [度] (水平=0)。運動量式の重力項 g sinθ に使う
     elev0::Float64 = 0.0                     # 入口 (最上流の面) の標高 [m]。Emの位置エネルギー項に使う
+    # 姿勢 (residuals_flatcc.jl 冒頭の【姿勢】):
+    #   :heat_bottom … 下面加熱 (蒸発器が下)。平面 (primary wick 側) が下、曲面が上。蒸気は曲面の最上部の円冠 (従来)
+    #   :heat_top    … 上面加熱 (上下反転)。平面が上、曲面が下。液は曲面の底の円弓形、蒸気は平面側 (primary wick の直下)
+    orientation::Symbol = :heat_bottom
 end
 
 # 凝縮器プレート (A5052)。L × W の長方形 (L 方向 nx 分割、W 方向 ny 分割)、厚さ t。

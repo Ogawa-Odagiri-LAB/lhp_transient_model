@@ -135,9 +135,16 @@ secondary wick の 2 節点の残差 (s.E, s.T は各 2 要素: [1] = A (平面�
   A: dE_A/dt = ṁ(⟨h⟩_in − ⟨h⟩_out) + Q_cs_A − Q_nc_A + Q_leak + Q_AB      (液の流れ ṁ・primary wick からの熱は A を通る)
   B: dE_B/dt = Q_cs_B − Q_nc_B + Q_wall − Q_AB                           (壁面凝縮の潜熱 Q_wall は B へ)
   Q_AB = G_AB (T_B − T_A)  (B → A)
+
+via_B = true (上面加熱 :heat_top): CC の液は底の曲面 (B) に溜まるので、液の流れは CC → B → A → primary wick の順に通る。
+  B: + ṁ(⟨h⟩_in,B − ⟨h⟩_BA),   A: + ṁ(⟨h⟩_BA − ⟨h⟩_out)
+  ⟨h⟩_in,B = wm h(T_CC) + (1−wm) h(T_B),  ⟨h⟩_BA = wm h(T_B) + (1−wm) h(T_A),  ⟨h⟩_out は従来と同じ
+  (B が失う分と A が得る分が同じ式なので、エネルギーは厳密に保存する)。via_B = false (既定) は従来どおり。
+
+Q_wall_A (上面加熱): 平面側 (節点 A) での壁面凝縮の潜熱。A に入る (既定 0 = 従来)。Q_wall は曲面 (B) の分。
 """
 function residual_swick2!(resid, du, s, sp, ṁ, T_cc, T_w1, P_w, Q_cs_A, Q_cs_B, Q_nc_A, Q_nc_B, Q_wall, Q_leak,
-    tables::FluidTables; ρ_l_ref, ε_m=1e-8)
+    tables::FluidTables; ρ_l_ref, ε_m=1e-8, via_B::Bool=false, Q_wall_A=0.0)
 
     T_A = s.T[1]
     T_B = s.T[2]
@@ -146,12 +153,19 @@ function residual_swick2!(resid, du, s, sp, ṁ, T_cc, T_w1, P_w, Q_cs_A, Q_cs_B
     lpA = liquid_props(T_A, P_w, tables)
     lpB = liquid_props(T_B, P_w, tables)
     h_w1 = liquid_props(T_w1, P_w, tables).h
-    hf_in = wm * h_cc + (1 - wm) * lpA.h
     hf_out = wm * lpA.h + (1 - wm) * h_w1
     Q_AB = sp.G_AB * (T_B - T_A)
 
-    resid.E[1] = du.E[1] - (ṁ * (hf_in - hf_out) + Q_cs_A - Q_nc_A + Q_leak + Q_AB)
-    resid.E[2] = du.E[2] - (Q_cs_B - Q_nc_B + Q_wall - Q_AB)
+    if via_B
+        hf_inB = wm * h_cc + (1 - wm) * lpB.h
+        hf_BA  = wm * lpB.h + (1 - wm) * lpA.h
+        resid.E[1] = du.E[1] - (ṁ * (hf_BA - hf_out) + Q_cs_A - Q_nc_A + Q_leak + Q_AB + Q_wall_A)
+        resid.E[2] = du.E[2] - (ṁ * (hf_inB - hf_BA) + Q_cs_B - Q_nc_B + Q_wall - Q_AB)
+    else
+        hf_in = wm * h_cc + (1 - wm) * lpA.h
+        resid.E[1] = du.E[1] - (ṁ * (hf_in - hf_out) + Q_cs_A - Q_nc_A + Q_leak + Q_AB + Q_wall_A)
+        resid.E[2] = du.E[2] - (Q_cs_B - Q_nc_B + Q_wall - Q_AB)
+    end
     resid.T[1] = s.E[1] - sp.V_A * ((1 - sp.por) * sp.ρ_w * sp.C_w * T_A + sp.por * ρ_l_ref * lpA.e)
     resid.T[2] = s.E[2] - sp.V_B * ((1 - sp.por) * sp.ρ_w * sp.C_w * T_B + sp.por * ρ_l_ref * lpB.e)
     return nothing
